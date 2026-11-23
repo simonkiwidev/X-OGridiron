@@ -1,7 +1,7 @@
 // Works out where every player, defender and the ball are at any moment of a play.
 // `scene` = { players, defenders } (see scene.js).
 import { routePoints, FIELD } from './routes.js';
-import { ZONES, zoneAt, inZone, clampToZone } from './zones.js';
+import { ZONES, zoneAt, inZone, clampToZone, LINES } from './zones.js';
 
 const SPEED = 6.5; // attackers, metres per second at "normal"
 const DEF_SPEED = 5.8; // defenders are a little slower, so good routes can get open
@@ -250,6 +250,9 @@ export function buildTimeline(scene, opts = {}) {
         const sack = b.carrier === 0 && b.pos[1] < 0 && !handedOff && !caught;
         result = { type: sack ? 'sack' : 'tagged', t, where: b.pos, who: b.carrier, by: n.i, gain: b.pos[1], caught: !!caught };
       }
+    }
+    if (!result && b && b.carrier >= 0 && b.pos[1] >= LINES[3]) {
+      result = { type: 'touchdown', t, where: b.pos, who: b.carrier, caught: !!caught };
     }
     if (result) {
       lastK = k;

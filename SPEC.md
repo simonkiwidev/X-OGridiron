@@ -80,6 +80,11 @@ plus running: QB Run, Handoff, Pitch.
 - No receiver chosen: shows who was open / covered at the moment of the throw.
 - Defence set-ups get the same results from the defence's point of view.
 
+## The four lines
+- Four bold numbered lines across the field in front of the line of scrimmage (evenly spaced). No distances shown.
+- Simulate results count lines crossed ("tagged after crossing 2 lines"); crossing line 4 is a touchdown.
+- Short zones run from the line of scrimmage to line 2, deep zones from line 2 to line 4.
+
 ## Field size
 - Teacher sets the real field size per class (presets or custom width × length in front of the line); default 30 × 20 m.
 - "Just try it" has its own field size on the device. Routes and zones scale to fit.

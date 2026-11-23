@@ -4,7 +4,7 @@ import { PASS_ROUTES, RUN_PLAYS, CUSTOM, FIELD, DEPTH_NAMES, routeById, defaultD
 import { setPlayerCount, addDefender, setDefenderCount, cleanLabel, sampleDefence, MIN_PLAYERS, MAX_PLAYERS, MAX_DEFENDERS } from './formation.js';
 import { renderPlay, svgOpen, fromSvg, toSvg, PLAYER_R } from './field.js';
 import { buildTimeline, roleOf, zoneOf, resolveMarks } from './timeline.js';
-import { ZONES, zoneAt } from './zones.js';
+import { ZONES, zoneAt, linesCrossed } from './zones.js';
 import { sceneOf, opponentOf, kindOf } from './scene.js';
 import { $, esc, toast, showScreen } from './ui.js';
 
@@ -605,9 +605,10 @@ function describe(r) {
   const def = isDefence();
   const who = (i) => scene.players[i]?.label || '';
   const by = (i) => scene.defenders[i]?.label || 'A defender';
-  const m = (u) => toMetres(u);
-  const gainText = (u) => (m(u) > 0 ? `${m(u)} m` : m(u) < 0 ? `${-m(u)} m backwards` : 'no gain');
-  const td = r.where && r.where[1] >= FIELD.front - 2;
+  const n = (y) => linesCrossed(y);
+  const gainText = (y) =>
+    y < 0 ? 'behind the line of scrimmage' : n(y) === 0 ? 'before line 1' : `after crossing ${n(y) === 1 ? '1 line' : `${n(y)} lines`}`;
+  const td = r.where && n(r.where[1]) >= 4;
   switch (r.type) {
     case 'covered':
       return def
@@ -621,24 +622,28 @@ function describe(r) {
       const g = gainText(r.gain);
       if (r.caught) {
         return def
-          ? ['ok', '🏃 Tagged', `${who(r.who)} caught it, but ${by(r.by)} tagged them after ${g}.`]
-          : ['good', '✅ COMPLETE!', `${who(r.who)} caught it and gained ${g} before ${by(r.by)} tagged them.`];
+          ? ['ok', '🏃 Tagged', `${who(r.who)} caught it, but ${by(r.by)} tagged them ${g}.`]
+          : ['good', '✅ COMPLETE!', `${who(r.who)} caught it and was tagged by ${by(r.by)} ${g}.`];
       }
-      const short = m(r.gain) < 4;
+      const short = n(r.gain) === 0;
       return def
-        ? [short ? 'good' : 'ok', short ? '🛡 STOPPED!' : '🏃 Tagged', `${by(r.by)} tagged ${who(r.who)} after ${g}.`]
-        : [short ? 'bad' : 'ok', '🏃 Tagged', `${who(r.who)} was tagged by ${by(r.by)} after ${g}.`];
+        ? [short ? 'good' : 'ok', short ? '🛡 STOPPED!' : '🏃 Tagged', `${by(r.by)} tagged ${who(r.who)} ${g}.`]
+        : [short ? 'bad' : 'ok', '🏃 Tagged', `${who(r.who)} was tagged by ${by(r.by)} ${g}.`];
     }
+    case 'touchdown':
+      return def
+        ? ['bad', '😬 TOUCHDOWN', `${who(r.who)} ${r.caught ? 'caught it and ' : ''}got past line 4.`]
+        : ['good', '🏈 TOUCHDOWN!', `${who(r.who)} ${r.caught ? 'caught it and ' : ''}crossed all 4 lines!`];
     case 'complete':
       if (td) return def ? ['bad', '😬 TOUCHDOWN', `${who(r.who)} caught it and nobody could tag them.`] : ['good', '🏈 TOUCHDOWN!', `${who(r.who)} caught it and ran all the way!`];
       return def
-        ? ['bad', '😬 Complete', `${who(r.who)} caught it and gained ${gainText(r.gain)}.`]
-        : ['good', '✅ COMPLETE!', `${who(r.who)} caught it and gained ${gainText(r.gain)}. Nobody tagged them!`];
+        ? ['bad', '😬 Complete', `${who(r.who)} caught it and finished ${gainText(r.gain)}.`]
+        : ['good', '✅ COMPLETE!', `${who(r.who)} caught it and finished ${gainText(r.gain)}. Nobody tagged them!`];
     case 'run':
       if (td) return def ? ['bad', '😬 TOUCHDOWN', `${who(r.who)} ran all the way.`] : ['good', '🏈 TOUCHDOWN!', `${who(r.who)} ran all the way!`];
       return def
-        ? ['bad', '😬 Big gain', `${who(r.who)} gained ${gainText(r.gain)} without being tagged.`]
-        : ['good', '🏃 Big gain!', `${who(r.who)} gained ${gainText(r.gain)} without being tagged.`];
+        ? ['bad', '😬 Big gain', `${who(r.who)} finished ${gainText(r.gain)} without being tagged.`]
+        : ['good', '🏃 Big gain!', `${who(r.who)} finished ${gainText(r.gain)} without being tagged.`];
     case 'scan': {
       const names = (list) => list.map(who).join(', ') || 'nobody';
       const n = r.open.length + r.covered.length;

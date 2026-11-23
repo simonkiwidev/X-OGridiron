@@ -1,7 +1,7 @@
 // Draws the field, players and routes as SVG.
 import { FIELD, routePoints, isRunRoute } from './routes.js';
 import { buildTimeline, resolveMarks, roleOf, zoneOf } from './timeline.js';
-import { ZONES, ZONE_LINES } from './zones.js';
+import { ZONES, ZONE_LINES, LINES } from './zones.js';
 import { sceneOf } from './scene.js';
 
 export const viewBox = () => ({ x: -1.5, y: -0.5, w: FIELD.width + 3, h: FIELD.front - FIELD.back + 1 });
@@ -33,11 +33,6 @@ function fieldMarkup(thumb) {
     const y = i * step;
     if (y <= FIELD.back + 0.01) continue;
     s += `<line x1="0" x2="${W}" y1="${sy(y)}" y2="${sy(y)}" stroke="#fff" stroke-opacity="0.45" stroke-width="0.15"/>`;
-    if (!thumb) {
-      const m = Math.abs(i * 5) + ' m';
-      s += `<text x="2.2" y="${f1(FIELD.front - y - 0.5)}" class="fnum">${m}</text>`;
-      s += `<text x="${W - 2.2}" y="${f1(FIELD.front - y - 0.5)}" class="fnum" text-anchor="end">${m}</text>`;
-    }
   }
   // hash ticks every real metre
   if (!thumb) {
@@ -52,6 +47,16 @@ function fieldMarkup(thumb) {
   }
   // line of scrimmage
   s += `<line x1="0" x2="${W}" y1="${sy(0)}" y2="${sy(0)}" stroke="#74c0fc" stroke-width="0.35"/>`;
+  // the four PE lines
+  LINES.forEach((l, i) => {
+    s += `<line x1="0" x2="${W}" y1="${sy(l)}" y2="${sy(l)}" stroke="#ffe066" stroke-width="${thumb ? 0.3 : 0.4}" stroke-opacity="0.95"/>`;
+    if (!thumb) {
+      for (const x of [3.6, W - 3.6]) {
+        s += `<g transform="translate(${x} ${sy(l)})"><circle r="1.25" fill="#ffe066" stroke="#5c4a00" stroke-width="0.15"/>` +
+          `<text class="lnum" dy="0.48">${i + 1}</text></g>`;
+      }
+    }
+  });
   return s;
 }
 
@@ -130,8 +135,6 @@ function zonesMarkup(scene, sel, thumb) {
   }
   const dash = 'stroke="#fff" stroke-opacity="0.55" stroke-width="0.2" stroke-dasharray="0.9 0.6"';
   s += `<line x1="${L.mid}" x2="${L.mid}" y1="${sy(L.front)}" y2="${sy(L.back)}" ${dash}/>`;
-  s += `<line x1="0" x2="${FIELD.width}" y1="${sy(L.split)}" y2="${sy(L.split)}" ${dash}/>`;
-  s += `<line x1="0" x2="${FIELD.width}" y1="${sy(L.back)}" y2="${sy(L.back)}" ${dash}/>`;
   if (!thumb) {
     for (const z of Object.values(ZONES)) {
       s += `<text class="znum" x="${f1(z.centre[0])}" y="${sy(z.centre[1] - 1.4)}">${z.id}</text>`;

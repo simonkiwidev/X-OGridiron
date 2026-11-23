@@ -10,10 +10,17 @@ export const ZONES = {
 };
 export const ZONE_LINES = { mid: MID, split: 11, back: 24, front: 0.5 };
 
-// Short zones cover the first ~40% of the field in front of the line, deep zones most of the rest.
+// The four PE lines across the field, evenly spaced in front of the line of scrimmage.
+// Crossing line 4 is a touchdown.
+export const LINES = [0, 0, 0, 0];
+export const linesCrossed = (y) => LINES.filter((l) => y >= l).length;
+
+// Short zones run from the line of scrimmage to line 2, deep zones from line 2 to line 4.
 function rebuild() {
-  const split = +(FIELD.front * 0.4).toFixed(2);
-  const back = +(FIELD.front * 0.88).toFixed(2);
+  const step = (FIELD.front - 1) / 4;
+  LINES.forEach((_, i) => (LINES[i] = +((i + 1) * step).toFixed(2)));
+  const split = LINES[1];
+  const back = LINES[3];
   Object.assign(ZONE_LINES, { split, back });
   Object.assign(ZONES[1], { x0: 0, x1: MID, y0: 0.5, y1: split });
   Object.assign(ZONES[2], { x0: MID, x1: 50, y0: 0.5, y1: split });
