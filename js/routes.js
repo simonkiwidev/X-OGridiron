@@ -4,7 +4,26 @@
 // Preset route points are relative to the player's start:
 //   dx > 0 means "towards the outside" (flipped by `dir`), dy > 0 means downfield.
 
-export const FIELD = { width: 50, back: -12, front: 28 };
+// The field is drawn on a fixed 50-unit-wide grid. `scale` turns units into real metres,
+// so a 30 m wide PE field has scale 0.6 and routes shrink to fit it.
+export const FIELD = { width: 50, back: -12, front: 28, scale: 1, realW: 50, realD: 28 };
+export const DEFAULT_FIELD = { w: 30, d: 20 };
+const fieldListeners = [];
+export const onFieldChange = (f) => fieldListeners.push(f);
+
+/** Set the real field size in metres: width, and depth in front of the line. */
+export function setFieldSize(w = DEFAULT_FIELD.w, d = DEFAULT_FIELD.d) {
+  w = Math.max(10, Math.min(60, +w || DEFAULT_FIELD.w));
+  d = Math.max(8, Math.min(60, +d || DEFAULT_FIELD.d));
+  if (w === FIELD.realW && d === FIELD.realD) return;
+  FIELD.realW = w;
+  FIELD.realD = d;
+  FIELD.scale = w / 50;
+  FIELD.front = d / FIELD.scale;
+  fieldListeners.forEach((f) => f());
+}
+/** Units on the field -> real metres. */
+export const toMetres = (u) => Math.round(u * FIELD.scale);
 
 export const DEPTH = { s: 0.6, m: 1, d: 1.5 };
 export const DEPTH_NAMES = { s: 'Short', m: 'Medium', d: 'Deep' };

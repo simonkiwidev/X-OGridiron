@@ -361,3 +361,34 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
 .section-head h2 { font-size: 20px; }
 .badge-def { display: inline-block; background: #e03131; color: #fff; font-size: 11px; font-weight: 800; padding: 2px 6px; border-radius: 6px; margin-right: 6px; vertical-align: 2px; }
 .field.playing .markline { display: none; }
+
+/* ---------- simulate ---------- */
+.btn.sim { background: #1c7ed6; color: #fff; }
+.btn.on-target { background: #fff; color: #10261a; }
+.result {
+  position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
+  min-width: min(420px, 86%); max-width: 90%; text-align: center;
+  background: rgba(10, 30, 18, 0.94); border-radius: 22px; padding: 18px 22px; pointer-events: none;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); border: 4px solid var(--muted);
+  animation: pop 0.35s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+.result.good { border-color: #51cf66; }
+.result.bad { border-color: #ff6b6b; }
+.result.ok { border-color: var(--accent); }
+.r-title { font-size: 34px; font-weight: 900; letter-spacing: 0.02em; }
+.result.good .r-title { color: #8ce99a; }
+.result.bad .r-title { color: #ffa8a8; }
+.result.ok .r-title { color: var(--accent); }
+.r-text { font-size: 18px; margin-top: 6px; color: var(--text); }
+@keyframes pop { from { transform: translateX(-50%) scale(0.6); opacity: 0; } }
+.r-spot { fill: none; stroke-width: 0.45; stroke: #fff; animation: pulse 0.8s ease-in-out infinite; }
+.r-spot.good { stroke: #8ce99a; }
+.r-spot.bad { stroke: #ffa8a8; }
+
+/* ---------- field size picker ---------- */
+.size-presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.size-presets .btn.on { background: var(--accent); color: var(--accent-ink); }
+.size-row { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.size-row input { width: 80px; text-align: center; }
+.field-size-line { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--panel); border-radius: 14px; padding: 12px 16px; margin-top: 14px; }
+@media (max-width: 760px) { .r-title { font-size: 26px; } .r-text { font-size: 15px; } }

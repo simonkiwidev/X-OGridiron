@@ -7,6 +7,7 @@ import * as local from './storage.js';
 import { PICS, PIC_NAMES, codeToPics, codeLabel, CODE_LEN } from './pictures.js';
 import { checkTeamName, cleanName } from './names.js';
 import { kindOf } from './scene.js';
+import { setFieldSize, DEFAULT_FIELD } from './routes.js';
 
 /* ---------------- shared bits ---------------- */
 let cloudPromise = null;
@@ -135,6 +136,68 @@ function qrSvg(qrcode, text) {
   return q.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
 }
 
+/* ---------------- field size ---------------- */
+const FKEY = 'xog.field';
+const localField = () => {
+  try {
+    return JSON.parse(localStorage.getItem(FKEY)) || DEFAULT_FIELD;
+  } catch {
+    return DEFAULT_FIELD;
+  }
+};
+const applyField = (f) => setFieldSize(f?.w ?? DEFAULT_FIELD.w, f?.d ?? DEFAULT_FIELD.d);
+const fieldLabel = (f) => `${(f || DEFAULT_FIELD).w} × ${(f || DEFAULT_FIELD).d} m`;
+const FIELD_PRESETS = [
+  ['Small', 20, 15],
+  ['PE field', 30, 20],
+  ['Big', 40, 30],
+  ['Full gridiron', 50, 28],
+];
+
+function fieldPicker(current, onSave) {
+  const cur = current || DEFAULT_FIELD;
+  overlay(
+    `<h2>📏 Field size</h2>
+     <p class="muted">Match your real playing space. Routes shrink or grow to fit.</p>
+     <div class="size-presets">${FIELD_PRESETS.map(
+       ([n, w, d]) => `<button class="btn${cur.w === w && cur.d === d ? ' on' : ''}" data-preset="${w},${d}">${n}<br><small>${w} × ${d} m</small></button>`,
+     ).join('')}</div>
+     <div class="size-row">
+       <label>Width <input id="f-w" class="text-input" type="number" inputmode="numeric" min="10" max="60" value="${cur.w}"></label> m
+       <label>Length in front of the line <input id="f-d" class="text-input" type="number" inputmode="numeric" min="8" max="60" value="${cur.d}"></label> m
+     </div>
+     <div class="kp-row"><button class="btn" data-kp="cancel">Cancel</button><button class="btn primary" data-kp="save">Save</button></div>`,
+    {
+      onClick: (e) => {
+        const pr = e.target.closest('[data-preset]');
+        if (pr) {
+          const [w, d] = pr.dataset.preset.split(',');
+          $('f-w').value = w;
+          $('f-d').value = d;
+          return;
+        }
+        const k = e.target.closest('[data-kp]')?.dataset.kp;
+        if (k === 'cancel') closeOverlay();
+        if (k === 'save') {
+          const w = Math.max(10, Math.min(60, Math.round(+$('f-w').value) || DEFAULT_FIELD.w));
+          const d = Math.max(8, Math.min(60, Math.round(+$('f-d').value) || DEFAULT_FIELD.d));
+          closeOverlay();
+          onSave({ w, d });
+        }
+      },
+    },
+  );
+}
+
+async function useClassField(c, classId) {
+  try {
+    const k = await c.getClass(classId);
+    applyField(k?.field);
+  } catch {
+    applyField(null);
+  }
+}
+
 /* ---------------- student session ---------------- */
 const SKEY = 'xog.session';
 const getSession = () => {
@@ -186,13 +249,20 @@ function landing() {
 /* ================= TRY (no class, saved on this device) ================= */
 function localHome() {
   const list = local.listPlays();
+  applyField(localField());
   setPage(`
-    ${header('Just try it', '#/')}
+    ${header('Just try it', '#/', `<button class="btn" data-field>📏 Field ${fieldLabel(localField())}</button>`)}
     <main class="page-main">
       <p class="muted">These plays are saved on this device only. Join a class to share them with your teacher.</p>
       ${playSections(list, ['copy', 'delete'], true)}
     </main>`);
   page.onclick = (e) => {
+    if (e.target.closest('[data-field]')) {
+      return fieldPicker(localField(), (f) => {
+        localStorage.setItem(FKEY, JSON.stringify(f));
+        localHome();
+      });
+    }
     const np = makeNew(e, list);
     if (np) {
       local.savePlay(np);
@@ -211,6 +281,7 @@ function localHome() {
 function localPlay(id) {
   const p = local.getPlay(id);
   if (!p) return go('#/try');
+  applyField(localField());
   openDesigner(p, { save: (pl) => local.savePlay(pl), back: () => go('#/try'), library: () => local.listPlays() });
 }
 
@@ -269,7 +340,7 @@ function setPageKeep(html) {
 }
 
 function enterTeam(cls, team) {
-  setSession({ classId: cls.id, className: cls.name, classCode: cls.code, teamId: team.id, teamName: team.name });
+  setSession({ classId: cls.id, className: cls.name, classCode: cls.code, teamId: team.id, teamName: team.name, field: cls.field || null });
   closeOverlay();
   go('#/team');
 }
@@ -383,6 +454,7 @@ async function teamHome() {
   if (!s) return go('#/');
   teamPlays = [];
   bookPlays = [];
+  applyField(s.field);
   const c = await cloud();
   try {
     await c.ensureUser();
@@ -431,6 +503,18 @@ async function teamHome() {
     c.watchPlaybook(s.classId, (list) => {
       if (!list) return;
       bookPlays = list;
+      draw();
+    }),
+  );
+  // Follow the teacher's field size for this class.
+  track(
+    c.watchClass(s.classId, (k) => {
+      if (!k) return;
+      const f = k.field || null;
+      if (JSON.stringify(f) === JSON.stringify(s.field)) return;
+      s.field = f;
+      setSession(s);
+      applyField(f);
       draw();
     }),
   );
@@ -493,6 +577,7 @@ async function teamPlay(id) {
   await c.ensureUser().catch(() => {});
   const p = await waitForList(() => teamPlays, id, (cb) => c.watchPlays(s.classId, s.teamId, cb));
   if (!p) return go('#/team');
+  applyField(s.field);
   openDesigner(clone(p), {
     save: (pl) => {
       c.savePlay(s.classId, s.teamId, pl);
@@ -511,6 +596,7 @@ async function teamBookPlay(id) {
   await c.ensureUser().catch(() => {});
   const p = await waitForList(() => bookPlays, id, (cb) => c.watchPlaybook(s.classId, cb));
   if (!p) return go('#/team');
+  applyField(s.field);
   openDesigner(clone(p), {
     readOnly: true,
     subtitle: p.fromTeam ? `From ${p.fromTeam}` : 'Class playbook',
@@ -769,6 +855,10 @@ async function teacherClass(classId) {
           </div>
         </section>
 
+        <div class="field-size-line"><span>📏 Field size: <b>${fieldLabel(cls.field)}</b></span>
+          <span class="muted small">Every team in this class uses this size.</span><span class="spacer"></span>
+          <button class="btn" data-fieldsize>Change</button></div>
+
         <div class="tabs-row"><h2>Teams</h2><button class="btn primary" data-addteam>＋ Add team</button></div>
         ${
           teams.length
@@ -806,6 +896,7 @@ async function teacherClass(classId) {
     c.watchClass(classId, (k, e) => {
       if (e || !k) return problem(e ? 'Could not open this class.' : 'This class doesn’t exist any more.', '#/teacher');
       cls = k;
+      applyField(cls.field);
       draw();
     }),
   );
@@ -847,6 +938,12 @@ async function teacherClass(classId) {
          </div>`,
         { full: true, onClick: (ev) => ev.target.closest('[data-kp=close]') && closeOverlay() },
       );
+    }
+    if (e.target.closest('[data-fieldsize]')) {
+      return fieldPicker(cls.field, (f) => {
+        c.setClassField(cls.id, f);
+        toast(`Field set to ${fieldLabel(f)}`);
+      });
     }
     if (e.target.closest('[data-rename-class]')) {
       const n = prompt('Class name', cls.name);
@@ -912,6 +1009,7 @@ async function teacherTeam(classId, teamId) {
   loading();
   const c = await cloud();
   await c.getUser();
+  await useClassField(c, classId);
   let team = null;
   let plays = null;
   let code = null;
@@ -964,6 +1062,7 @@ function fullscreenAction() {
 async function teacherViewPlay(classId, teamId, playId) {
   const c = await cloud();
   await c.getUser();
+  await useClassField(c, classId);
   let teamName = '';
   const p = await waitForList(() => teacherPlaysCache, playId, (cb) => c.watchPlays(classId, teamId, cb));
   if (!p) return go(`#/teacher/class/${classId}/team/${teamId}`);
@@ -989,6 +1088,7 @@ async function teacherViewPlay(classId, teamId, playId) {
 async function teacherBookPlay(classId, playId) {
   const c = await cloud();
   await c.getUser();
+  await useClassField(c, classId);
   let cache = [];
   const p = await waitForList(() => cache, playId, (cb) => c.watchPlaybook(classId, cb));
   if (!p) return go(`#/teacher/class/${classId}`);
@@ -1060,6 +1160,7 @@ async function teacherPrint(classId, teamId) {
   loading();
   const c = await cloud();
   await c.getUser();
+  await useClassField(c, classId);
   let team = null;
   let plays = [];
   const draw = () => {

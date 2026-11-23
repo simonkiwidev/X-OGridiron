@@ -1,7 +1,7 @@
 // The play designer screen. Works for attack plays (players + routes) and
 // defence set-ups (defenders who stay, guard a zone or mark an attacker).
-import { PASS_ROUTES, RUN_PLAYS, CUSTOM, FIELD, DEPTH_NAMES, routeById, defaultDir, hasDepth, iconPoints } from './routes.js';
-import { setPlayerCount, addDefender, setDefenderCount, cleanLabel, MIN_PLAYERS, MAX_PLAYERS, MAX_DEFENDERS } from './formation.js';
+import { PASS_ROUTES, RUN_PLAYS, CUSTOM, FIELD, DEPTH_NAMES, routeById, defaultDir, hasDepth, iconPoints, toMetres } from './routes.js';
+import { setPlayerCount, addDefender, setDefenderCount, cleanLabel, sampleDefence, MIN_PLAYERS, MAX_PLAYERS, MAX_DEFENDERS } from './formation.js';
 import { renderPlay, svgOpen, fromSvg, toSvg, PLAYER_R } from './field.js';
 import { buildTimeline, roleOf, zoneOf, resolveMarks } from './timeline.js';
 import { ZONES, zoneAt } from './zones.js';
@@ -36,6 +36,8 @@ export function openDesigner(p, context) {
   selected = null;
   armed = null;
   history = [];
+  svg = null;
+  hideResult();
   showScreen('designer');
   const d = $('designer');
   d.classList.toggle('readonly', !!ctx.readOnly);
@@ -115,8 +117,10 @@ function findSelected() {
 }
 
 /* ---------------- drawing ---------------- */
+let testDefence = null; // sample defence used by Simulate when there's no defence
 function computeScene() {
   scene = sceneOf(play, opponentOf(play, library()));
+  if (testDefence && !scene.defenders.length) scene = { ...scene, defenders: testDefence.defenders, editDefenders: false };
 }
 
 function renderField(extra = '') {
@@ -209,6 +213,7 @@ function renderPanel() {
   const name = r ? routeById(r.id).name : 'No route yet — pick one below';
   const isQB = obj === play.players[0];
   let btns = '';
+  if (!isQB) btns += `<button class="btn${obj.target ? ' on-target' : ''}" data-sel="target">🎯 ${obj.target ? 'QB throws here ✓' : 'Throw here'}</button>`;
   if (r) {
     btns += `<button class="btn" data-sel="flip">⇆ Flip</button>`;
     if (hasDepth(r.id)) {
@@ -282,6 +287,12 @@ $('sel-panel').addEventListener('click', (e) => {
     } else if (act === 'flip') obj.route.dir = -(obj.route.dir || 1);
     else if (act === 'depth') obj.route.depth = b.dataset.depth;
     else if (act === 'clear') obj.route = null;
+    else if (act === 'target') {
+      const on = !obj.target;
+      play.players.forEach((p) => delete p.target); // only one receiver
+      if (on) obj.target = true;
+      if (on) toast(`The QB will throw to ${obj.label}`);
+    }
   }
   changed();
   render();
@@ -513,26 +524,36 @@ fieldEl.addEventListener('pointercancel', () => {
 });
 
 /* ---------------- playback ---------------- */
-function startPlayback(speed) {
+function startPlayback(speed, simulate = false) {
   if (playback) {
     stopPlayback();
     return;
   }
   armed = null;
   selected = null;
+  hideResult();
+  if (simulate) {
+    computeScene();
+    if (!scene.players.length) return toast('Pick an attack to try against first');
+    if (!scene.defenders.length) {
+      testDefence = sampleDefence();
+      toast('No defence picked, so testing against a sample defence');
+    }
+  }
   render();
-  const tl = buildTimeline(scene);
+  const tl = buildTimeline(scene, { simulate });
   $('field').classList.add('playing');
   const pEls = scene.players.map((_, i) => svg.querySelector('#pl-' + i));
   const dEls = scene.defenders.map((_, i) => svg.querySelector('#df-' + i));
   const ball = svg.querySelector('#ballpos');
   let t = 0;
   let last = performance.now();
+  let shown = false;
   playback = { state: 'running' };
   setPlayButtons();
   const place = (el, pos) => {
     const [x, y] = toSvg(pos);
-    el.setAttribute('transform', `translate(${x.toFixed(2)} ${y.toFixed(2)})`);
+    el?.setAttribute('transform', `translate(${x.toFixed(2)} ${y.toFixed(2)})`);
   };
   const frame = (now) => {
     if (!playback) return;
@@ -544,7 +565,11 @@ function startPlayback(speed) {
     if (b && ball) {
       const [bx, by] = toSvg(b.carrier >= 0 ? [b.pos[0] + 1.2, b.pos[1] + 0.3] : b.pos);
       ball.setAttribute('transform', `translate(${bx.toFixed(2)} ${by.toFixed(2)}) scale(${(1 + b.air * 0.7).toFixed(2)})`);
-      pEls.forEach((el, i) => el.classList.toggle('carrier', b.carrier === i && t > tl.hikeTime));
+      pEls.forEach((el, i) => el?.classList.toggle('carrier', b.carrier === i && t > tl.hikeTime));
+    }
+    if (simulate && tl.result && !shown && t >= tl.result.t) {
+      shown = true;
+      showResult(tl.result);
     }
     if (t >= tl.duration) {
       playback.state = 'done';
@@ -560,26 +585,89 @@ function stopPlayback() {
   if (!playback) return;
   cancelAnimationFrame(playback.raf);
   playback = null;
+  testDefence = null;
+  hideResult();
   $('field').classList.remove('playing');
   setPlayButtons();
   if (play) render();
 }
 
 function setPlayButtons() {
-  const p = $('btn-play');
-  const s = $('btn-slow');
-  if (!playback) {
-    p.textContent = '▶ Play';
-    s.textContent = '🐢 Slow-mo';
-  } else {
-    const label = playback.state === 'done' ? '⟲ Reset' : '■ Stop';
-    p.textContent = label;
-    s.textContent = label;
+  const btns = [$('btn-play'), $('btn-slow'), $('btn-sim')];
+  const labels = ['▶ Play', '🐢 Slow-mo', '🎯 Simulate'];
+  btns.forEach((b, i) => {
+    b.textContent = !playback ? labels[i] : playback.state === 'done' ? '⟲ Reset' : '■ Stop';
+  });
+}
+
+/* ---------------- simulate results ---------------- */
+function describe(r) {
+  const def = isDefence();
+  const who = (i) => scene.players[i]?.label || '';
+  const by = (i) => scene.defenders[i]?.label || 'A defender';
+  const m = (u) => toMetres(u);
+  const gainText = (u) => (m(u) > 0 ? `${m(u)} m` : m(u) < 0 ? `${-m(u)} m backwards` : 'no gain');
+  const td = r.where && r.where[1] >= FIELD.front - 2;
+  switch (r.type) {
+    case 'covered':
+      return def
+        ? ['good', '🛡 DEFENDED!', `${by(r.by)} covered the pass to ${who(r.who)}.`]
+        : ['bad', '❌ COVERED', `${by(r.by)} was too close to ${who(r.who)}. Try a different route or receiver.`];
+    case 'sack':
+      return def
+        ? ['good', '💥 SACK!', `${by(r.by)} tagged the QB before the throw.`]
+        : ['bad', '💥 SACKED', `${by(r.by)} tagged the QB before the throw. Watch out for rushers!`];
+    case 'tagged': {
+      const g = gainText(r.gain);
+      if (r.caught) {
+        return def
+          ? ['ok', '🏃 Tagged', `${who(r.who)} caught it, but ${by(r.by)} tagged them after ${g}.`]
+          : ['good', '✅ COMPLETE!', `${who(r.who)} caught it and gained ${g} before ${by(r.by)} tagged them.`];
+      }
+      const short = m(r.gain) < 4;
+      return def
+        ? [short ? 'good' : 'ok', short ? '🛡 STOPPED!' : '🏃 Tagged', `${by(r.by)} tagged ${who(r.who)} after ${g}.`]
+        : [short ? 'bad' : 'ok', '🏃 Tagged', `${who(r.who)} was tagged by ${by(r.by)} after ${g}.`];
+    }
+    case 'complete':
+      if (td) return def ? ['bad', '😬 TOUCHDOWN', `${who(r.who)} caught it and nobody could tag them.`] : ['good', '🏈 TOUCHDOWN!', `${who(r.who)} caught it and ran all the way!`];
+      return def
+        ? ['bad', '😬 Complete', `${who(r.who)} caught it and gained ${gainText(r.gain)}.`]
+        : ['good', '✅ COMPLETE!', `${who(r.who)} caught it and gained ${gainText(r.gain)}. Nobody tagged them!`];
+    case 'run':
+      if (td) return def ? ['bad', '😬 TOUCHDOWN', `${who(r.who)} ran all the way.`] : ['good', '🏈 TOUCHDOWN!', `${who(r.who)} ran all the way!`];
+      return def
+        ? ['bad', '😬 Big gain', `${who(r.who)} gained ${gainText(r.gain)} without being tagged.`]
+        : ['good', '🏃 Big gain!', `${who(r.who)} gained ${gainText(r.gain)} without being tagged.`];
+    case 'scan': {
+      const names = (list) => list.map(who).join(', ') || 'nobody';
+      const n = r.open.length + r.covered.length;
+      return def
+        ? [r.open.length ? 'ok' : 'good', `🛡 You covered ${r.covered.length} of ${n}`, `Open when the QB throws: ${names(r.open)}.`]
+        : [r.open.length ? 'good' : 'bad', `👀 Open: ${names(r.open)}`, `Covered: ${names(r.covered)}. Tap a player and choose 🎯 Throw here to test a pass.`];
+    }
   }
+  return ['ok', '', ''];
+}
+
+function showResult(r) {
+  const [tone, title, text] = describe(r);
+  const el = $('result');
+  el.className = 'result ' + tone;
+  el.innerHTML = `<div class="r-title">${esc(title)}</div><div class="r-text">${esc(text)}</div>`;
+  el.hidden = false;
+  if (r.where && svg) {
+    const [x, y] = toSvg(r.where);
+    svg.insertAdjacentHTML('beforeend', `<circle class="r-spot ${tone}" cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="2.6"/>`);
+  }
+}
+function hideResult() {
+  $('result').hidden = true;
 }
 
 $('btn-play').addEventListener('click', () => startPlayback(1));
 $('btn-slow').addEventListener('click', () => startPlayback(0.35));
+$('btn-sim').addEventListener('click', () => startPlayback(0.8, true));
 
 /* ---------------- toolbar ---------------- */
 $('btn-back').addEventListener('click', () => {

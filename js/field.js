@@ -4,7 +4,7 @@ import { buildTimeline, resolveMarks, roleOf, zoneOf } from './timeline.js';
 import { ZONES, ZONE_LINES } from './zones.js';
 import { sceneOf } from './scene.js';
 
-export const VIEWBOX = { x: -1.5, y: -0.5, w: FIELD.width + 3, h: FIELD.front - FIELD.back + 1 };
+export const viewBox = () => ({ x: -1.5, y: -0.5, w: FIELD.width + 3, h: FIELD.front - FIELD.back + 1 });
 export const PLAYER_R = 1.6;
 
 export const toSvg = ([x, y]) => [x, FIELD.front - y];
@@ -16,36 +16,42 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 function fieldMarkup(thumb) {
   const W = FIELD.width;
-  const top = 0;
-  const bottom = FIELD.front - FIELD.back;
-  let s = `<rect x="${VIEWBOX.x}" y="${VIEWBOX.y}" width="${VIEWBOX.w}" height="${VIEWBOX.h}" fill="#1f7a3a"/>`;
-  // mowing stripes every 5 m
-  for (let y = FIELD.back, i = 0; y < FIELD.front; y += 5, i++) {
-    if (i % 2) s += `<rect x="0" y="${FIELD.front - y - 5}" width="${W}" height="5" fill="#238443"/>`;
+  const V = viewBox();
+  const sy = (y) => f1(FIELD.front - y);
+  const step = 5 / FIELD.scale; // a line every 5 real metres
+  let s = `<rect x="${V.x}" y="${V.y}" width="${V.w}" height="${V.h}" fill="#1f7a3a"/>`;
+  // mowing stripes every 5 m, measured from the line
+  for (let i = Math.floor(FIELD.back / step); i * step < FIELD.front; i++) {
+    if (i % 2 === 0) continue;
+    const y0 = Math.max(FIELD.back, i * step);
+    const y1 = Math.min(FIELD.front, (i + 1) * step);
+    if (y1 > y0) s += `<rect x="0" y="${sy(y1)}" width="${W}" height="${f1(y1 - y0)}" fill="#238443"/>`;
   }
-  s += `<rect x="0" y="${top}" width="${W}" height="${bottom}" fill="none" stroke="#fff" stroke-width="0.25"/>`;
-  for (let y = -10; y < FIELD.front; y += 5) {
-    if (y === 0) continue;
-    const sy = FIELD.front - y;
-    s += `<line x1="0" x2="${W}" y1="${sy}" y2="${sy}" stroke="#fff" stroke-opacity="0.45" stroke-width="0.15"/>`;
+  s += `<rect x="0" y="0" width="${W}" height="${f1(FIELD.front - FIELD.back)}" fill="none" stroke="#fff" stroke-width="0.25"/>`;
+  for (let i = Math.ceil(FIELD.back / step); i * step < FIELD.front - 0.01; i++) {
+    if (i === 0) continue;
+    const y = i * step;
+    if (y <= FIELD.back + 0.01) continue;
+    s += `<line x1="0" x2="${W}" y1="${sy(y)}" y2="${sy(y)}" stroke="#fff" stroke-opacity="0.45" stroke-width="0.15"/>`;
     if (!thumb) {
-      s += `<text x="2.2" y="${sy - 0.5}" class="fnum">${y > 0 ? y + ' m' : -y + ' m'}</text>`;
-      s += `<text x="${W - 2.2}" y="${sy - 0.5}" class="fnum" text-anchor="end">${y > 0 ? y + ' m' : -y + ' m'}</text>`;
+      const m = Math.abs(i * 5) + ' m';
+      s += `<text x="2.2" y="${f1(FIELD.front - y - 0.5)}" class="fnum">${m}</text>`;
+      s += `<text x="${W - 2.2}" y="${f1(FIELD.front - y - 0.5)}" class="fnum" text-anchor="end">${m}</text>`;
     }
   }
-  // hash ticks every metre
+  // hash ticks every real metre
   if (!thumb) {
+    const tick = 1 / FIELD.scale;
     let ticks = '';
-    for (let y = FIELD.back + 1; y < FIELD.front; y++) {
-      if (y % 5 === 0) continue;
-      const sy = FIELD.front - y;
-      ticks += `M${W * 0.36} ${sy}h0.7M${W * 0.64 - 0.7} ${sy}h0.7`;
+    for (let k = Math.ceil(FIELD.back / tick) + 1; k * tick < FIELD.front; k++) {
+      if (k % 5 === 0) continue;
+      const y = sy(k * tick);
+      ticks += `M${W * 0.36} ${y}h0.7M${W * 0.64 - 0.7} ${y}h0.7`;
     }
     s += `<path d="${ticks}" stroke="#fff" stroke-opacity="0.35" stroke-width="0.12"/>`;
   }
   // line of scrimmage
-  const los = FIELD.front;
-  s += `<line x1="0" x2="${W}" y1="${los}" y2="${los}" stroke="#74c0fc" stroke-width="0.35"/>`;
+  s += `<line x1="0" x2="${W}" y1="${sy(0)}" y2="${sy(0)}" stroke="#74c0fc" stroke-width="0.35"/>`;
   return s;
 }
 
@@ -149,7 +155,11 @@ function markLinesMarkup(scene) {
 function exchangeMarkup(scene) {
   let s = '';
   for (const e of buildTimeline({ players: scene.players, defenders: [] }).exchanges()) {
-    if (e.kind === 'pitch') {
+    if (e.kind === 'pass') {
+      s += `<polyline points="${ptsAttr([e.from, e.to])}" fill="none" stroke="#fff" stroke-opacity="0.85" stroke-width="0.3" stroke-dasharray="0.3 0.6" stroke-linecap="round"/>`;
+      const [x, y] = toSvg(e.to);
+      s += `<g transform="translate(${f1(x)} ${f1(y)})"><circle r="1.3" fill="none" stroke="#fff" stroke-width="0.2" stroke-dasharray="0.4 0.3"/></g>`;
+    } else if (e.kind === 'pitch') {
       s += `<polyline points="${ptsAttr([e.from, e.to])}" fill="none" stroke="#d9a066" stroke-width="0.3" stroke-dasharray="0.4 0.5"/>`;
       const [x, y] = toSvg(e.to);
       s += `<g transform="translate(${f1(x)} ${f1(y)}) scale(0.8)">${ballMarkup()}</g>`;
@@ -184,6 +194,6 @@ export function renderPlay(play, opts = {}) {
 }
 
 export function svgOpen(cls = '') {
-  const v = VIEWBOX;
+  const v = viewBox();
   return `<svg class="${cls}" viewBox="${v.x} ${v.y} ${v.w} ${v.h}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">`;
 }

@@ -72,6 +72,18 @@ plus running: QB Run, Handoff, Pitch.
 - **Defence set-ups** are their own kind of play (section under the attack plays, "＋ New defence").
   They're tried against a chosen attack play (or a sample attack); attack plays can be tried against a chosen defence.
 
+## Simulate
+- 🎯 Simulate runs the play against the defence (or a sample 4-zone defence) and shows a result banner.
+- Tap a receiver → "🎯 Throw here": the QB throws ~1.6 s after the hike. Covered (defender within ~2 m of the catch),
+  Complete (then run-after-catch until tagged or touchdown), or Sacked (rusher tags the QB first).
+- Running plays: defenders chase the runner; result is "Tagged after X m" or touchdown.
+- No receiver chosen: shows who was open / covered at the moment of the throw.
+- Defence set-ups get the same results from the defence's point of view.
+
+## Field size
+- Teacher sets the real field size per class (presets or custom width × length in front of the line); default 30 × 20 m.
+- "Just try it" has its own field size on the device. Routes and zones scale to fit.
+
 ## Later ideas (not in v1)
 - Forward passes with ball flight.
 - Moving defenders and "Complete / Covered" results.

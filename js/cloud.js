@@ -169,6 +169,7 @@ export function watchClass(c, cb) {
 }
 
 export const renameClass = (c, name) => fb.updateDoc(classRef(c), { name }).catch(console.error);
+export const setClassField = (c, field) => fb.updateDoc(classRef(c), { field }).catch(console.error);
 
 export async function findClassByCode(code) {
   await ensureUser();

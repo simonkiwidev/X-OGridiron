@@ -1,4 +1,5 @@
 import { ZONES } from './zones.js';
+import { FIELD } from './routes.js';
 
 // Default player spots. The QB (player 1) stands a few metres back with the ball;
 // everyone else lines up evenly along the line of scrimmage. No blockers.
@@ -56,7 +57,8 @@ export function makeDefender(play) {
     const [x, y] = ZONES[zone].centre;
     return { id, label: 'D' + n, x, y, role: 'zone', zone };
   }
-  const [x, y] = SPARE_SPOTS.find(([sx, sy]) => !taken(sx, sy)) || [25, 10];
+  const spots = SPARE_SPOTS.map(([sx, sy]) => [sx, Math.min(sy, FIELD.front - 2)]);
+  const [x, y] = spots.find(([sx, sy]) => !taken(sx, sy)) || [25, Math.min(10, FIELD.front - 2)];
   return { id, label: 'D' + n, x, y, role: 'mark', mark: null };
 }
 
@@ -92,15 +94,23 @@ export function newPlay(name, kind = 'offence') {
   return play;
 }
 
+/** A simple 4-zone defence to test attacks against. */
+export function sampleDefence() {
+  const d = { id: 'sample-def', name: 'Sample defence', kind: 'defence', players: [], defenders: [] };
+  setDefenderCount(d, 4);
+  return d;
+}
+
 /** A simple attack to try defences against. */
 let sample = null;
 export function sampleAttack() {
-  if (sample) return sample;
+  if (sample && sample.front === FIELD.front) return sample;
   sample = { id: 'sample', name: 'Sample attack', kind: 'offence', players: [], defenders: [], updated: 0 };
   setPlayerCount(sample, 5);
   const routes = { 1: 'go', 2: 'slant', 3: 'hook', 4: 'out' };
   sample.players.forEach((p, i) => {
     if (routes[i]) p.route = { id: routes[i], dir: p.x >= 25 ? 1 : -1, depth: 'm' };
   });
+  sample.front = FIELD.front;
   return sample;
 }

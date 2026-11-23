@@ -1,19 +1,30 @@
 // The four PE zones beyond the line (2 × 2): short-left 1, short-right 2, deep-left 3, deep-right 4.
+import { FIELD, onFieldChange } from './routes.js';
+
 const MID = 25;
-const SPLIT = 11; // metres from the line where "short" becomes "deep"
-const BACK = 24;
-
 export const ZONES = {
-  1: { id: 1, name: 'Short left', x0: 0, x1: MID, y0: 0.5, y1: SPLIT },
-  2: { id: 2, name: 'Short right', x0: MID, x1: 50, y0: 0.5, y1: SPLIT },
-  3: { id: 3, name: 'Deep left', x0: 0, x1: MID, y0: SPLIT, y1: BACK },
-  4: { id: 4, name: 'Deep right', x0: MID, x1: 50, y0: SPLIT, y1: BACK },
+  1: { id: 1, name: 'Short left' },
+  2: { id: 2, name: 'Short right' },
+  3: { id: 3, name: 'Deep left' },
+  4: { id: 4, name: 'Deep right' },
 };
-for (const z of Object.values(ZONES)) z.centre = [(z.x0 + z.x1) / 2, (z.y0 + z.y1) / 2];
+export const ZONE_LINES = { mid: MID, split: 11, back: 24, front: 0.5 };
 
-export const ZONE_LINES = { mid: MID, split: SPLIT, back: BACK, front: 0.5 };
+// Short zones cover the first ~40% of the field in front of the line, deep zones most of the rest.
+function rebuild() {
+  const split = +(FIELD.front * 0.4).toFixed(2);
+  const back = +(FIELD.front * 0.88).toFixed(2);
+  Object.assign(ZONE_LINES, { split, back });
+  Object.assign(ZONES[1], { x0: 0, x1: MID, y0: 0.5, y1: split });
+  Object.assign(ZONES[2], { x0: MID, x1: 50, y0: 0.5, y1: split });
+  Object.assign(ZONES[3], { x0: 0, x1: MID, y0: split, y1: back });
+  Object.assign(ZONES[4], { x0: MID, x1: 50, y0: split, y1: back });
+  for (const z of Object.values(ZONES)) z.centre = [(z.x0 + z.x1) / 2, (z.y0 + z.y1) / 2];
+}
+rebuild();
+onFieldChange(rebuild);
 
-export const zoneAt = (x, y) => (x < MID ? (y < SPLIT ? 1 : 3) : y < SPLIT ? 2 : 4);
+export const zoneAt = (x, y) => (x < MID ? (y < ZONE_LINES.split ? 1 : 3) : y < ZONE_LINES.split ? 2 : 4);
 
 export const inZone = (z, x, y, m = 0) => x >= z.x0 - m && x <= z.x1 + m && y >= z.y0 - m && y <= z.y1 + m;
 
