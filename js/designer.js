@@ -1,13 +1,17 @@
-// The play designer screen: pick routes, tap players, drag, draw, play back.
+// The play designer screen. Works for attack plays (players + routes) and
+// defence set-ups (defenders who stay, guard a zone or mark an attacker).
 import { PASS_ROUTES, RUN_PLAYS, CUSTOM, FIELD, DEPTH_NAMES, routeById, defaultDir, hasDepth, iconPoints } from './routes.js';
-import { setPlayerCount, addDefender, cleanLabel, MIN_PLAYERS, MAX_PLAYERS, MAX_DEFENDERS } from './formation.js';
+import { setPlayerCount, addDefender, setDefenderCount, cleanLabel, MIN_PLAYERS, MAX_PLAYERS, MAX_DEFENDERS } from './formation.js';
 import { renderPlay, svgOpen, fromSvg, toSvg, PLAYER_R } from './field.js';
-import { buildTimeline } from './timeline.js';
+import { buildTimeline, roleOf, zoneOf, resolveMarks } from './timeline.js';
+import { ZONES, zoneAt } from './zones.js';
+import { sceneOf, opponentOf, kindOf } from './scene.js';
 import { $, esc, toast, showScreen } from './ui.js';
 
 /* ---------------- state ---------------- */
 let play = null;
-let ctx = null; // { save(play), readOnly, back(), actions: [{label, cls, onClick}], subtitle }
+let ctx = null; // { save(play), readOnly, back(), actions: [{label, cls, onClick}], subtitle, library() }
+let scene = null;
 let selected = null; // { kind: 'player'|'defender', id }
 let armed = null; // route id waiting for a tap
 let history = [];
@@ -15,12 +19,15 @@ let playback = null;
 let svg = null;
 
 export const currentPlay = () => play;
+const isDefence = () => kindOf(play) === 'defence';
+const library = () => (ctx?.library ? ctx.library() : []);
 
 /**
  * Open a play.
  * context.save(play)  – called (debounced) after each change; omit for view-only
  * context.back()      – back button
  * context.actions     – extra buttons for the top bar
+ * context.library()   – plays this play can be tried against
  */
 export function openDesigner(p, context) {
   stopPlayback();
@@ -32,10 +39,12 @@ export function openDesigner(p, context) {
   showScreen('designer');
   const d = $('designer');
   d.classList.toggle('readonly', !!ctx.readOnly);
+  d.classList.toggle('kind-defence', isDefence());
   $('play-name').value = play.name;
   $('play-name').readOnly = !!ctx.readOnly;
   $('saved').textContent = ctx.subtitle || '';
   renderActions();
+  renderVsChoices();
   render();
 }
 
@@ -54,6 +63,28 @@ export function renderActions() {
 $('top-actions').addEventListener('click', (e) => {
   const b = e.target.closest('[data-act]');
   if (b && ctx?.actions?.[b.dataset.act]) ctx.actions[b.dataset.act].onClick(play, b);
+});
+
+/* "Try against" chooser */
+function renderVsChoices() {
+  const sel = $('vs-select');
+  const lib = library().filter((p) => p.id !== play.id);
+  let opts;
+  if (isDefence()) {
+    opts = [['sample', 'Sample attack'], ...lib.filter((p) => kindOf(p) === 'offence').map((p) => [p.id, p.name])];
+  } else {
+    opts = [['none', 'No defence'], ...lib.filter((p) => kindOf(p) === 'defence').map((p) => [p.id, '🛡 ' + p.name])];
+  }
+  const current = play.vs && opts.some(([id]) => id === play.vs) ? play.vs : opts[0][0];
+  sel.innerHTML = opts.map(([id, name]) => `<option value="${esc(id)}"${id === current ? ' selected' : ''}>${esc(name)}</option>`).join('');
+  $('vs-label').textContent = isDefence() ? 'Try against' : 'Against';
+}
+$('vs-select').addEventListener('change', (e) => {
+  stopPlayback();
+  play.vs = e.target.value;
+  selected = null;
+  changed();
+  render();
 });
 
 function snapshot() {
@@ -77,12 +108,15 @@ function flushSave() {
   $('saved').textContent = ok === false ? 'Could not save' : 'Saved ✓';
 }
 
-function findPlayer(id) {
-  return play.players.find((p) => p.id === id);
-}
 function findSelected() {
-  if (!selected) return null;
-  return selected.kind === 'player' ? findPlayer(selected.id) : play.defenders.find((d) => d.id === selected.id);
+  if (!selected || !scene) return null;
+  if (selected.kind === 'player') return scene.editPlayers ? scene.players.find((p) => p.id === selected.id) : null;
+  return scene.editDefenders ? scene.defenders.find((d) => d.id === selected.id) : null;
+}
+
+/* ---------------- drawing ---------------- */
+function computeScene() {
+  scene = sceneOf(play, opponentOf(play, library()));
 }
 
 function renderField(extra = '') {
@@ -90,20 +124,25 @@ function renderField(extra = '') {
     $('field').innerHTML = svgOpen('fsvg') + '</svg>';
     svg = $('field').firstChild;
   }
-  svg.innerHTML = renderPlay(play, { selected }) + extra;
+  svg.innerHTML = renderPlay(play, { selected, scene }) + extra;
 }
 
 function render(extra = '') {
+  computeScene();
   if (selected && !findSelected()) selected = null;
   renderField(extra);
   renderPanel();
   renderHint();
-  $('count').textContent = play.players.length;
-  $('btn-minus').disabled = play.players.length <= MIN_PLAYERS;
-  $('btn-plus').disabled = play.players.length >= MAX_PLAYERS;
-  $('btn-def').disabled = play.defenders.length >= MAX_DEFENDERS;
+  const def = isDefence();
+  const n = def ? play.defenders.length : play.players.length;
+  $('count').textContent = n;
+  $('count-label').textContent = def ? (n === 1 ? 'defender' : 'defenders') : 'players';
+  $('btn-minus').disabled = n <= (def ? 1 : MIN_PLAYERS);
+  $('btn-plus').disabled = n >= (def ? MAX_DEFENDERS : MAX_PLAYERS);
+  $('btn-def').disabled = !scene.editDefenders || play.defenders.length >= MAX_DEFENDERS;
   $('btn-undo').disabled = history.length === 0;
   for (const b of document.querySelectorAll('[data-route]')) b.classList.toggle('armed', b.dataset.route === armed);
+  $('def-group').hidden = !scene.editDefenders || !scene.defenders.length;
 }
 
 function renderHint() {
@@ -115,15 +154,54 @@ function renderHint() {
   h.classList.toggle('show', !!msg);
 }
 
+const labelEditor = (obj, note) => `
+  <label class="label-edit">Name
+    <input class="label-input" data-label maxlength="2" value="${esc(obj.label || '')}" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Name, up to 2 letters or numbers">
+    <span class="muted small">${note}</span>
+  </label>`;
+
+const ROLE_BTNS = [
+  ['static', '🧍 Stay'],
+  ['zone', '🟥 Zone'],
+  ['mark', '👁 Mark'],
+];
+
 function renderPanel() {
   const el = $('sel-panel');
   const obj = findSelected();
   if (!obj) {
-    el.innerHTML = `<p class="tip"><b>1.</b> Tap a route &nbsp; <b>2.</b> Tap a player.<br>Drag players to move them.</p>`;
+    el.innerHTML = isDefence()
+      ? `<p class="tip"><b>Tap a defender</b> to choose their job.<br>Drag them to move them. Drop a zone defender in a square to guard it.</p>`
+      : `<p class="tip"><b>1.</b> Tap a route &nbsp; <b>2.</b> Tap a player.<br>Drag players to move them.</p>`;
     return;
   }
   if (selected.kind === 'defender') {
-    el.innerHTML = `<div class="sel-title"><span class="dot def">✕</span> Defender</div>
+    const role = roleOf(obj);
+    const marks = resolveMarks(scene);
+    const idx = scene.defenders.indexOf(obj);
+    const markIdx = marks[idx];
+    let extra = '';
+    if (role === 'zone') {
+      const z = zoneOf(obj);
+      extra = `<div class="chip-row"><span class="muted small">Guard zone</span>${Object.values(ZONES)
+        .map((zz) => `<button class="chip${zz.id === z ? ' on' : ''}" data-zone="${zz.id}" title="${zz.name}">${zz.id}</button>`)
+        .join('')}<span class="muted small">${ZONES[z].name}</span></div>`;
+    } else if (role === 'mark') {
+      extra = scene.players.length
+        ? `<div class="chip-row"><span class="muted small">Mark</span>
+            <button class="chip${!obj.mark ? ' on' : ''}" data-mark="">Nearest</button>
+            ${scene.players
+              .map(
+                (p, a) =>
+                  `<button class="chip pchip${obj.mark === p.id ? ' on' : ''}${!obj.mark && markIdx === a ? ' auto' : ''}" style="--pc:${p.color}" data-mark="${esc(p.id)}">${esc(p.label)}</button>`,
+              )
+              .join('')}</div>`
+        : `<p class="muted small">Pick an attack to try against, then choose who to mark.</p>`;
+    }
+    el.innerHTML = `<div class="sel-title"><span class="dot def">${esc(obj.label || '')}</span> Defender</div>
+      ${labelEditor(obj, '2 letters or numbers')}
+      <div class="seg role-seg">${ROLE_BTNS.map(([r, t]) => `<button class="btn${role === r ? ' on' : ''}" data-role="${r}">${t}</button>`).join('')}</div>
+      ${extra}
       <div class="sel-btns"><button class="btn danger" data-sel="remove-def">Remove defender</button></div>`;
     return;
   }
@@ -141,14 +219,11 @@ function renderPanel() {
     btns += `<button class="btn danger" data-sel="clear">✕ Remove route</button>`;
   }
   el.innerHTML = `<div class="sel-title"><span class="dot" style="background:${obj.color}">${esc(obj.label)}</span> ${esc(name)}</div>
-    <label class="label-edit">Player name
-      <input class="label-input" data-label maxlength="2" value="${esc(obj.label)}" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Player name, up to 2 letters or numbers">
-      <span class="muted small">${isQB ? 'Starts with the ball' : '2 letters or numbers'}</span>
-    </label>
+    ${labelEditor(obj, isQB ? 'Starts with the ball' : '2 letters or numbers')}
     <div class="sel-btns">${btns}</div>`;
 }
 
-// Renaming a player: up to 2 letters or numbers.
+// Renaming: up to 2 letters or numbers.
 $('sel-panel').addEventListener('focusin', (e) => {
   if (e.target.matches('[data-label]')) snapshot();
 });
@@ -172,21 +247,59 @@ $('sel-panel').addEventListener('keydown', (e) => {
   if (e.target.matches('[data-label]') && e.key === 'Enter') e.target.blur();
 });
 
+function setRole(d, role) {
+  d.role = role;
+  if (role === 'zone') d.zone = zoneAt(d.x, d.y);
+  if (role === 'mark' && d.mark === undefined) d.mark = null;
+}
+
 $('sel-panel').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-sel]');
-  if (!b) return;
   const obj = findSelected();
   if (!obj) return;
+  const roleBtn = e.target.closest('[data-role]');
+  const zoneBtn = e.target.closest('[data-zone]');
+  const markBtn = e.target.closest('[data-mark]');
+  const b = e.target.closest('[data-sel]');
+  if (!roleBtn && !zoneBtn && !markBtn && !b) return;
+  stopPlayback();
   snapshot();
-  const act = b.dataset.sel;
-  if (act === 'remove-def') {
-    play.defenders = play.defenders.filter((d) => d !== obj);
-    selected = null;
-  } else if (act === 'flip') obj.route.dir = -(obj.route.dir || 1);
-  else if (act === 'depth') obj.route.depth = b.dataset.depth;
-  else if (act === 'clear') obj.route = null;
+  if (roleBtn) setRole(obj, roleBtn.dataset.role);
+  else if (zoneBtn) {
+    obj.zone = +zoneBtn.dataset.zone;
+    const z = ZONES[obj.zone];
+    if (zoneAt(obj.x, obj.y) !== obj.zone) {
+      // walk them into their zone, next to anyone already standing in the middle
+      const spots = [[0, 0], [-5, 0], [5, 0], [0, -3], [0, 3]].map(([dx, dy]) => [z.centre[0] + dx, z.centre[1] + dy]);
+      const free = spots.find(([x, y]) => !play.defenders.some((d) => d !== obj && Math.hypot(d.x - x, d.y - y) < 2.5));
+      [obj.x, obj.y] = free || z.centre;
+    }
+  } else if (markBtn) obj.mark = markBtn.dataset.mark || null;
+  else {
+    const act = b.dataset.sel;
+    if (act === 'remove-def') {
+      play.defenders = play.defenders.filter((d) => d !== obj);
+      selected = null;
+    } else if (act === 'flip') obj.route.dir = -(obj.route.dir || 1);
+    else if (act === 'depth') obj.route.depth = b.dataset.depth;
+    else if (act === 'clear') obj.route = null;
+  }
   changed();
   render();
+});
+
+// "Everyone" buttons for the whole defence.
+$('def-group').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-all]');
+  if (!b || !scene.editDefenders) return;
+  stopPlayback();
+  snapshot();
+  play.defenders.forEach((d) => {
+    setRole(d, b.dataset.all);
+    if (b.dataset.all === 'mark') d.mark = null;
+  });
+  changed();
+  render();
+  toast({ static: 'Everyone stays put', zone: 'Everyone guards the zone they stand in', mark: 'Everyone marks the nearest attacker' }[b.dataset.all]);
 });
 
 /* route buttons */
@@ -213,7 +326,7 @@ buildRouteButtons();
 
 document.querySelector('.panel').addEventListener('click', (e) => {
   const b = e.target.closest('[data-route]');
-  if (!b || !play) return;
+  if (!b || !play || isDefence()) return;
   stopPlayback();
   const id = b.dataset.route;
   if (id === 'qbrun') {
@@ -263,14 +376,18 @@ function toField(e) {
 function hitTest([x, y]) {
   let best = null;
   let bestD = 2.8;
-  play.players.forEach((p) => {
-    const d = Math.hypot(p.x - x, p.y - y);
-    if (d < bestD) (bestD = d), (best = { kind: 'player', obj: p });
-  });
-  play.defenders.forEach((p) => {
-    const d = Math.hypot(p.x - x, p.y - y);
-    if (d < bestD) (bestD = d), (best = { kind: 'defender', obj: p });
-  });
+  if (scene.editPlayers) {
+    scene.players.forEach((p) => {
+      const d = Math.hypot(p.x - x, p.y - y);
+      if (d < bestD) (bestD = d), (best = { kind: 'player', obj: p });
+    });
+  }
+  if (scene.editDefenders) {
+    scene.defenders.forEach((p) => {
+      const d = Math.hypot(p.x - x, p.y - y);
+      if (d < bestD) (bestD = d), (best = { kind: 'defender', obj: p });
+    });
+  }
   return best;
 }
 
@@ -316,7 +433,7 @@ fieldEl.addEventListener('pointermove', (e) => {
     if (Math.hypot(clamped[0] - last[0], clamped[1] - last[1]) > 0.7) {
       drawing.pts.push(clamped);
       const attr = drawing.pts.map((p) => toSvg(p).join(',')).join(' ');
-      render(`<polyline points="${attr}" fill="none" stroke="${drawing.player.color}" stroke-width="0.55" stroke-linejoin="round" stroke-linecap="round"/>`);
+      renderField(`<polyline points="${attr}" fill="none" stroke="${drawing.player.color}" stroke-width="0.55" stroke-linejoin="round" stroke-linecap="round"/>`);
     }
     return;
   }
@@ -326,12 +443,13 @@ fieldEl.addEventListener('pointermove', (e) => {
     down.moved = true;
     snapshot();
   }
-  const [x, y] = clampPos(down.hit.kind, toField(e));
-  down.hit.obj.x = x;
-  down.hit.obj.y = y;
-  down.hit.obj.auto = false;
-  selected = { kind: down.hit.kind, id: down.hit.obj.id };
-  render();
+  const o = down.hit.obj;
+  [o.x, o.y] = clampPos(down.hit.kind, toField(e));
+  o.auto = false;
+  // Zone defenders guard whichever square they're dropped in.
+  if (down.hit.kind === 'defender' && roleOf(o) === 'zone') o.zone = zoneAt(o.x, o.y);
+  selected = { kind: down.hit.kind, id: o.id };
+  renderField();
 });
 
 function finishDrawing() {
@@ -378,8 +496,7 @@ fieldEl.addEventListener('pointerup', () => {
     });
     if (!near) return;
     const before = JSON.stringify(play); // so one Undo reverts the move and the route
-    near.x = target[0];
-    near.y = target[1];
+    [near.x, near.y] = target;
     near.auto = false;
     applyRoute(near, armed);
     history[history.length - 1] = before;
@@ -404,26 +521,31 @@ function startPlayback(speed) {
   armed = null;
   selected = null;
   render();
-  const tl = buildTimeline(play);
+  const tl = buildTimeline(scene);
   $('field').classList.add('playing');
-  const els = play.players.map((_, i) => svg.querySelector('#pl-' + i));
+  const pEls = scene.players.map((_, i) => svg.querySelector('#pl-' + i));
+  const dEls = scene.defenders.map((_, i) => svg.querySelector('#df-' + i));
   const ball = svg.querySelector('#ballpos');
   let t = 0;
   let last = performance.now();
   playback = { state: 'running' };
   setPlayButtons();
+  const place = (el, pos) => {
+    const [x, y] = toSvg(pos);
+    el.setAttribute('transform', `translate(${x.toFixed(2)} ${y.toFixed(2)})`);
+  };
   const frame = (now) => {
     if (!playback) return;
     t += Math.min(0.05, (now - last) / 1000) * speed;
     last = now;
-    els.forEach((el, i) => {
-      const [x, y] = toSvg(tl.posAt(i, t));
-      el.setAttribute('transform', `translate(${x.toFixed(2)} ${y.toFixed(2)})`);
-    });
+    pEls.forEach((el, i) => place(el, tl.posAt(i, t)));
+    dEls.forEach((el, i) => place(el, tl.defAt(i, t)));
     const b = tl.ballAt(t);
-    const [bx, by] = toSvg(b.carrier >= 0 ? [b.pos[0] + 1.2, b.pos[1] + 0.3] : b.pos);
-    ball.setAttribute('transform', `translate(${bx.toFixed(2)} ${by.toFixed(2)}) scale(${(1 + b.air * 0.7).toFixed(2)})`);
-    els.forEach((el, i) => el.classList.toggle('carrier', b.carrier === i && t > tl.hikeTime));
+    if (b && ball) {
+      const [bx, by] = toSvg(b.carrier >= 0 ? [b.pos[0] + 1.2, b.pos[1] + 0.3] : b.pos);
+      ball.setAttribute('transform', `translate(${bx.toFixed(2)} ${by.toFixed(2)}) scale(${(1 + b.air * 0.7).toFixed(2)})`);
+      pEls.forEach((el, i) => el.classList.toggle('carrier', b.carrier === i && t > tl.hikeTime));
+    }
     if (t >= tl.duration) {
       playback.state = 'done';
       setPlayButtons();
@@ -472,6 +594,7 @@ $('btn-undo').addEventListener('click', () => {
   if (!prev) return;
   play = JSON.parse(prev);
   $('play-name').value = play.name;
+  renderVsChoices();
   changed();
   render();
 });
@@ -488,7 +611,8 @@ $('play-name').addEventListener('keydown', (e) => {
 function step(n) {
   stopPlayback();
   snapshot();
-  setPlayerCount(play, play.players.length + n);
+  if (isDefence()) setDefenderCount(play, play.defenders.length + n);
+  else setPlayerCount(play, play.players.length + n);
   changed();
   render();
 }

@@ -1,3 +1,5 @@
+import { ZONES } from './zones.js';
+
 // Default player spots. The QB (player 1) stands a few metres back with the ball;
 // everyone else lines up evenly along the line of scrimmage. No blockers.
 const LABELS = ['QB', 'X', 'Z', 'Y', 'H', 'F', 'R', 'S', 'T', 'W', 'U'];
@@ -5,11 +7,6 @@ const COLOURS = ['#ffd43b', '#4dabf7', '#ff922b', '#da77f2', '#f783ac', '#3bc9db
 
 const QB_SPOT = { x: 25, y: -4.5 };
 const LINE_Y = -1;
-
-export const DEFENCE_SPOTS = [
-  [25, 6], [10, 7], [40, 7], [18, 3], [32, 3], [25, 15],
-  [14, 14], [36, 14], [21, 1.5], [29, 1.5], [25, 1.5],
-];
 
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 11;
@@ -43,25 +40,67 @@ export function setPlayerCount(play, n) {
   spreadPlayers(play);
 }
 
+/* ---------------- defenders ---------------- */
+// role: 'static' (stays put), 'zone' (guards one of the 4 zones), 'mark' (follows an attacker).
+const SPARE_SPOTS = [[25, 3], [12, 3], [38, 3], [25, 8], [8, 14], [42, 14], [25, 20]];
+
+export function makeDefender(play) {
+  const ds = play.defenders;
+  const used = new Set(ds.filter((d) => d.role === 'zone').map((d) => d.zone));
+  const zone = [1, 2, 3, 4].find((z) => !used.has(z));
+  const taken = (x, y) => ds.some((d) => Math.hypot(d.x - x, d.y - y) < 2.5);
+  let n = 1;
+  while (ds.some((d) => d.label === 'D' + n)) n++;
+  const id = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  if (zone) {
+    const [x, y] = ZONES[zone].centre;
+    return { id, label: 'D' + n, x, y, role: 'zone', zone };
+  }
+  const [x, y] = SPARE_SPOTS.find(([sx, sy]) => !taken(sx, sy)) || [25, 10];
+  return { id, label: 'D' + n, x, y, role: 'mark', mark: null };
+}
+
 export function addDefender(play) {
   if (play.defenders.length >= MAX_DEFENDERS) return null;
-  const taken = (x, y) => play.defenders.some((d) => Math.hypot(d.x - x, d.y - y) < 2);
-  const spot = DEFENCE_SPOTS.find(([x, y]) => !taken(x, y)) || [25, 10];
-  const id = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-  const d = { id, x: spot[0], y: spot[1] };
+  const d = makeDefender(play);
   play.defenders.push(d);
   return d;
 }
 
-export function newPlay(name) {
+export function setDefenderCount(play, n) {
+  n = Math.max(1, Math.min(MAX_DEFENDERS, n));
+  while (play.defenders.length < n) addDefender(play);
+  play.defenders.length = n;
+}
+
+export function newPlay(name, kind = 'offence') {
   const play = {
     id: 'play_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     name,
+    kind,
     players: [],
     defenders: [],
     created: Date.now(),
     updated: Date.now(),
   };
-  setPlayerCount(play, 5);
+  if (kind === 'defence') {
+    setDefenderCount(play, 4);
+    play.vs = 'sample';
+  } else {
+    setPlayerCount(play, 5);
+  }
   return play;
+}
+
+/** A simple attack to try defences against. */
+let sample = null;
+export function sampleAttack() {
+  if (sample) return sample;
+  sample = { id: 'sample', name: 'Sample attack', kind: 'offence', players: [], defenders: [], updated: 0 };
+  setPlayerCount(sample, 5);
+  const routes = { 1: 'go', 2: 'slant', 3: 'hook', 4: 'out' };
+  sample.players.forEach((p, i) => {
+    if (routes[i]) p.route = { id: routes[i], dir: p.x >= 25 ? 1 : -1, depth: 'm' };
+  });
+  return sample;
 }

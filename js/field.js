@@ -1,6 +1,8 @@
 // Draws the field, players and routes as SVG.
 import { FIELD, routePoints, isRunRoute } from './routes.js';
-import { buildTimeline } from './timeline.js';
+import { buildTimeline, resolveMarks, roleOf, zoneOf } from './timeline.js';
+import { ZONES, ZONE_LINES } from './zones.js';
+import { sceneOf } from './scene.js';
 
 export const VIEWBOX = { x: -1.5, y: -0.5, w: FIELD.width + 3, h: FIELD.front - FIELD.back + 1 };
 export const PLAYER_R = 1.6;
@@ -81,31 +83,72 @@ export function ballMarkup(id = '') {
   );
 }
 
-function playerMarkup(p, i, selected, thumb) {
+function playerMarkup(p, i, selected, thumb, faded) {
   const [x, y] = toSvg([p.x, p.y]);
   const ring = selected ? `<circle r="${PLAYER_R + 0.7}" fill="none" stroke="#fff" stroke-width="0.35" class="selring"/>` : '';
   const label = thumb ? '' : `<text class="plabel" dy="0.45">${esc(p.label)}</text>`;
   return (
-    `<g class="player" id="pl-${i}" transform="translate(${f1(x)} ${f1(y)})">${ring}` +
+    `<g class="player${faded ? ' faded' : ''}" id="pl-${i}" transform="translate(${f1(x)} ${f1(y)})">${ring}` +
     `<circle r="${PLAYER_R}" fill="${p.color}" stroke="#0b2e17" stroke-width="0.3"/>${label}</g>`
   );
 }
 
-function defenderMarkup(d, selected) {
+function defenderMarkup(d, i, selected, thumb, faded) {
   const [x, y] = toSvg([d.x, d.y]);
-  const ring = selected ? `<circle r="${PLAYER_R + 0.7}" fill="none" stroke="#fff" stroke-width="0.35"/>` : '';
-  const k = 1.1;
+  const ring = selected ? `<circle r="${PLAYER_R + 0.7}" fill="none" stroke="#fff" stroke-width="0.35" class="selring"/>` : '';
+  const role = roleOf(d);
+  const label = thumb ? '' : `<text class="dlabel" dy="0.45">${esc(d.label || '')}</text>`;
+  // little badge: zone number, or a "follow" eye for markers
+  const badge =
+    thumb || role === 'static'
+      ? ''
+      : `<g transform="translate(1.35 -1.35)"><circle r="0.75" fill="#fff" stroke="#7a1414" stroke-width="0.12"/>` +
+        `<text class="dbadge" dy="0.32">${role === 'zone' ? zoneOf(d) : '👁'}</text></g>`;
   return (
-    `<g class="defender" transform="translate(${f1(x)} ${f1(y)})">${ring}` +
-    `<circle r="${PLAYER_R}" fill="#c92a2a" fill-opacity="0.25"/>` +
-    `<path d="M${-k} ${-k}L${k} ${k}M${k} ${-k}L${-k} ${k}" stroke="#ff6b6b" stroke-width="0.6" stroke-linecap="round"/>` +
-    `<path d="M${-k} ${-k}L${k} ${k}M${k} ${-k}L${-k} ${k}" stroke="#fff" stroke-opacity="0.5" stroke-width="0.15" stroke-linecap="round"/></g>`
+    `<g class="defender${faded ? ' faded' : ''}" id="df-${i}" transform="translate(${f1(x)} ${f1(y)})">${ring}` +
+    `<rect x="${-PLAYER_R}" y="${-PLAYER_R}" width="${PLAYER_R * 2}" height="${PLAYER_R * 2}" rx="0.55" fill="#e03131" stroke="#3b0a0a" stroke-width="0.3"/>` +
+    `${label}${badge}</g>`
   );
 }
 
-function exchangeMarkup(play) {
+function zonesMarkup(scene, sel, thumb) {
+  const ds = scene.defenders || [];
+  if (!ds.some((d) => roleOf(d) === 'zone')) return '';
+  const L = ZONE_LINES;
+  const sy = (y) => f1(FIELD.front - y);
   let s = '';
-  for (const e of buildTimeline(play).exchanges()) {
+  const selD = sel.kind === 'defender' ? ds.find((d) => d.id === sel.id) : null;
+  if (selD && roleOf(selD) === 'zone') {
+    const z = ZONES[zoneOf(selD)];
+    s += `<rect x="${z.x0}" y="${sy(z.y1)}" width="${z.x1 - z.x0}" height="${f1(z.y1 - z.y0)}" fill="#ff6b6b" fill-opacity="0.16"/>`;
+  }
+  const dash = 'stroke="#fff" stroke-opacity="0.55" stroke-width="0.2" stroke-dasharray="0.9 0.6"';
+  s += `<line x1="${L.mid}" x2="${L.mid}" y1="${sy(L.front)}" y2="${sy(L.back)}" ${dash}/>`;
+  s += `<line x1="0" x2="${FIELD.width}" y1="${sy(L.split)}" y2="${sy(L.split)}" ${dash}/>`;
+  s += `<line x1="0" x2="${FIELD.width}" y1="${sy(L.back)}" y2="${sy(L.back)}" ${dash}/>`;
+  if (!thumb) {
+    for (const z of Object.values(ZONES)) {
+      s += `<text class="znum" x="${f1(z.centre[0])}" y="${sy(z.centre[1] - 1.4)}">${z.id}</text>`;
+    }
+  }
+  return s;
+}
+
+function markLinesMarkup(scene) {
+  const marks = resolveMarks(scene);
+  let s = '';
+  scene.defenders.forEach((d, i) => {
+    const a = marks[i];
+    if (a == null) return;
+    const p = scene.players[a];
+    s += `<polyline class="markline" points="${ptsAttr([[d.x, d.y], [p.x, p.y]])}" fill="none" stroke="#ff8787" stroke-width="0.25" stroke-dasharray="0.5 0.5" stroke-opacity="0.9"/>`;
+  });
+  return s;
+}
+
+function exchangeMarkup(scene) {
+  let s = '';
+  for (const e of buildTimeline({ players: scene.players, defenders: [] }).exchanges()) {
     if (e.kind === 'pitch') {
       s += `<polyline points="${ptsAttr([e.from, e.to])}" fill="none" stroke="#d9a066" stroke-width="0.3" stroke-dasharray="0.4 0.5"/>`;
       const [x, y] = toSvg(e.to);
@@ -120,21 +163,23 @@ function exchangeMarkup(play) {
 
 /**
  * Full SVG markup for a play.
- * opts: { selected: {kind, id}, thumb, hideRoutes }
+ * opts: { selected: {kind, id}, thumb, scene }   (scene defaults to the play on its own)
  */
 export function renderPlay(play, opts = {}) {
   const sel = opts.selected || {};
+  const scene = opts.scene || sceneOf(play);
   let s = fieldMarkup(opts.thumb);
-  if (!opts.hideRoutes) {
-    play.players.forEach((p) => (s += routeMarkup(p, play, sel.kind === 'player' && sel.id === p.id)));
-    s += exchangeMarkup(play);
+  s += zonesMarkup(scene, sel, opts.thumb);
+  scene.players.forEach((p) => (s += routeMarkup(p, scene, sel.kind === 'player' && sel.id === p.id)));
+  s += exchangeMarkup(scene);
+  s += markLinesMarkup(scene);
+  scene.defenders.forEach((d, i) => (s += defenderMarkup(d, i, sel.kind === 'defender' && sel.id === d.id, opts.thumb, !scene.editDefenders)));
+  scene.players.forEach((p, i) => (s += playerMarkup(p, i, sel.kind === 'player' && sel.id === p.id, opts.thumb, !scene.editPlayers)));
+  const holder = scene.players[0];
+  if (holder) {
+    const [bx, by] = toSvg([holder.x + 1.2, holder.y + 0.3]);
+    s += `<g id="ballpos" transform="translate(${f1(bx)} ${f1(by)})">${ballMarkup('ball')}</g>`;
   }
-  play.defenders.forEach((d) => (s += defenderMarkup(d, sel.kind === 'defender' && sel.id === d.id)));
-  play.players.forEach((p, i) => (s += playerMarkup(p, i, sel.kind === 'player' && sel.id === p.id, opts.thumb)));
-  // ball starts with the QB (player 1)
-  const holder = play.players[0];
-  const [bx, by] = toSvg([holder.x + 1.2, holder.y + 0.3]);
-  s += `<g id="ballpos" transform="translate(${f1(bx)} ${f1(by)})">${ballMarkup('ball')}</g>`;
   return s;
 }
 

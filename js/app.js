@@ -6,6 +6,7 @@ import { newPlay } from './formation.js';
 import * as local from './storage.js';
 import { PICS, PIC_NAMES, codeToPics, codeLabel, CODE_LEN } from './pictures.js';
 import { checkTeamName, cleanName } from './names.js';
+import { kindOf } from './scene.js';
 
 /* ---------------- shared bits ---------------- */
 let cloudPromise = null;
@@ -78,14 +79,40 @@ function playCards(list, acts = ['copy', 'delete']) {
     <article class="card" data-id="${esc(p.id)}">
       <button class="thumb" data-act="open" aria-label="Open ${esc(p.name)}">${svgOpen('tsvg')}${renderPlay(p, { thumb: true })}</svg></button>
       <div class="card-info">
-        <div class="card-name">${esc(p.name)}</div>
-        <div class="card-meta">${p.fromTeam ? `From ${esc(p.fromTeam)} · ` : ''}${p.players.length} players · ${ago(p.updated)}</div>
+        <div class="card-name">${kindOf(p) === 'defence' ? '<span class="badge-def">DEF</span>' : ''}${esc(p.name)}</div>
+        <div class="card-meta">${p.fromTeam ? `From ${esc(p.fromTeam)} · ` : ''}${
+          kindOf(p) === 'defence' ? `${p.defenders.length} defenders` : `${p.players.length} players`
+        } · ${ago(p.updated)}</div>
       </div>
       ${acts.length ? `<div class="card-acts">${acts.map((a) => `<button class="btn small ${a === 'delete' || a === 'remove' ? 'danger' : ''}" data-act="${a}">${labels[a]}</button>`).join('')}</div>` : ''}
     </article>`,
     )
     .join('');
 }
+/** Attack plays, then a "Defence set-ups" section underneath. */
+function playSections(list, acts, withNew) {
+  const sec = (title, kind, newLabel) => {
+    const items = list.filter((p) => kindOf(p) === kind);
+    return `<div class="section-head"><h2>${title}</h2>${
+      withNew ? `<button class="btn primary${kind === 'offence' ? ' big' : ''}" data-new="${kind}">${newLabel}</button>` : ''
+    }</div>
+    ${
+      items.length
+        ? `<div class="play-list">${playCards(items, acts)}</div>`
+        : `<p class="empty">${kind === 'offence' ? 'No attack plays yet.' : 'No defence set-ups yet.'}${withNew ? ` Tap <b>${newLabel}</b> to make one!` : ''}</p>`
+    }`;
+  };
+  return sec('⚡ Attack plays', 'offence', '＋ New play') + sec('🛡 Defence set-ups', 'defence', '＋ New defence');
+}
+
+function makeNew(e, list) {
+  const nb = e.target.closest('[data-new]');
+  if (!nb) return null;
+  const kind = nb.dataset.new === 'defence' ? 'defence' : 'offence';
+  const n = list.filter((p) => kindOf(p) === kind).length + 1;
+  return newPlay(kind === 'defence' ? `Defence ${n}` : `Play ${n}`, kind);
+}
+
 const cardAction = (e) => {
   const btn = e.target.closest('[data-act]');
   const card = btn?.closest('.card');
@@ -160,17 +187,16 @@ function landing() {
 function localHome() {
   const list = local.listPlays();
   setPage(`
-    ${header('Just try it', '#/', `<button class="btn primary" data-new>＋ New play</button>`)}
+    ${header('Just try it', '#/')}
     <main class="page-main">
       <p class="muted">These plays are saved on this device only. Join a class to share them with your teacher.</p>
-      <div class="play-list">${playCards(list)}</div>
-      ${list.length ? '' : `<p class="empty">No plays yet. Tap <b>＋ New play</b> to make your first one!</p>`}
+      ${playSections(list, ['copy', 'delete'], true)}
     </main>`);
   page.onclick = (e) => {
-    if (e.target.closest('[data-new]')) {
-      const p = newPlay(`Play ${list.length + 1}`);
-      local.savePlay(p);
-      return go('#/try/play/' + p.id);
+    const np = makeNew(e, list);
+    if (np) {
+      local.savePlay(np);
+      return go('#/try/play/' + np.id);
     }
     const a = cardAction(e);
     if (!a) return;
@@ -185,7 +211,7 @@ function localHome() {
 function localPlay(id) {
   const p = local.getPlay(id);
   if (!p) return go('#/try');
-  openDesigner(p, { save: (pl) => local.savePlay(pl), back: () => go('#/try') });
+  openDesigner(p, { save: (pl) => local.savePlay(pl), back: () => go('#/try'), library: () => local.listPlays() });
 }
 
 /* ================= JOIN A CLASS ================= */
@@ -380,15 +406,9 @@ async function teamHome() {
             <button class="tab ${teamTab === 'ours' ? 'on' : ''}" data-tab="ours">Our plays</button>
             <button class="tab ${teamTab === 'book' ? 'on' : ''}" data-tab="book">⭐ Class playbook</button>
           </div>
-          ${teamTab === 'ours' ? `<button class="btn primary big" data-new>＋ New play</button>` : ''}
         </div>
         ${err ? `<p class="warn">${esc(err)}</p>` : ''}
-        <div class="play-list">${playCards(list, teamTab === 'ours' ? ['copy', 'delete'] : ['copy'])}</div>
-        ${
-          list.length
-            ? ''
-            : `<p class="empty">${teamTab === 'ours' ? 'No plays yet. Tap <b>＋ New play</b> to make your first one!' : 'Your teacher hasn’t shared any plays yet.'}</p>`
-        }
+        ${teamTab === 'book' && !list.length ? `<p class="empty">Your teacher hasn’t shared any plays yet.</p>` : playSections(list, teamTab === 'ours' ? ['copy', 'delete'] : ['copy'], teamTab === 'ours')}
       </main>`);
   };
   setPage('');
@@ -421,8 +441,9 @@ async function teamHome() {
     }
     const tab = e.target.closest('[data-tab]');
     if (tab) return (teamTab = tab.dataset.tab), draw();
-    if (e.target.closest('[data-new]')) {
-      const p = newPlay(`Play ${teamPlays.length + 1}`);
+    const np = makeNew(e, teamPlays);
+    if (np) {
+      const p = np;
       c.savePlay(s.classId, s.teamId, p);
       teamPlays = [p, ...teamPlays];
       return go('#/team/play/' + p.id);
@@ -479,6 +500,7 @@ async function teamPlay(id) {
       if (i >= 0) teamPlays[i] = clone(pl);
     },
     back: () => go('#/team'),
+    library: () => [...teamPlays, ...bookPlays],
   });
 }
 
@@ -493,6 +515,7 @@ async function teamBookPlay(id) {
     readOnly: true,
     subtitle: p.fromTeam ? `From ${p.fromTeam}` : 'Class playbook',
     back: () => go('#/team'),
+    library: () => [...teamPlays, ...bookPlays],
     actions: [
       {
         label: '＋ Copy to our plays',
@@ -768,7 +791,7 @@ async function teacherClass(classId) {
 
         <div class="tabs-row"><h2>⭐ Class playbook</h2></div>
         <p class="muted">Plays you share here can be opened and copied by every team. Open a team’s play and tap “Share to class playbook”.</p>
-        <div class="play-list">${playCards(book, ['remove'])}</div>
+        ${book.length ? playSections(book, ['remove'], false) : ''}
 
         <details class="danger-zone">
           <summary>Reset or delete this class</summary>
@@ -898,8 +921,7 @@ async function teacherTeam(classId, teamId) {
       <main class="page-main">
         <p class="muted">Picture code: <span class="tcode">${code ? codeToPics(code).join(' ') : '…'}</span> ${code ? `(${esc(codeLabel(code))})` : ''}</p>
         ${plays === null ? '<div class="center-msg"><div class="spinner"></div></div>' : ''}
-        <div class="play-list">${playCards(plays || [], ['share'])}</div>
-        ${plays && !plays.length ? `<p class="empty">This team hasn’t made any plays yet.</p>` : ''}
+        ${plays ? playSections(plays, ['share'], false) : ''}
       </main>`);
   };
   setPage('');
@@ -949,6 +971,7 @@ async function teacherViewPlay(classId, teamId, playId) {
   openDesigner(clone(p), {
     readOnly: true,
     back: () => go(`#/teacher/class/${classId}/team/${teamId}`),
+    library: () => teacherPlaysCache,
     actions: [
       ...fullscreenAction(),
       {
@@ -969,10 +992,12 @@ async function teacherBookPlay(classId, playId) {
   let cache = [];
   const p = await waitForList(() => cache, playId, (cb) => c.watchPlaybook(classId, cb));
   if (!p) return go(`#/teacher/class/${classId}`);
+  track(c.watchPlaybook(classId, (l) => (cache = l || cache)));
   openDesigner(clone(p), {
     readOnly: true,
     subtitle: p.fromTeam ? `From ${p.fromTeam}` : '',
     back: () => go(`#/teacher/class/${classId}`),
+    library: () => cache,
     actions: [
       ...fullscreenAction(),
       {

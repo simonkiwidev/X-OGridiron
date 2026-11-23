@@ -38,15 +38,23 @@
       <aside class="panel">
         <div id="sel-panel" class="sel-panel"></div>
 
-        <div class="group">
+        <div class="group" id="def-group" hidden>
+          <h3>Whole defence</h3>
+          <div class="seg all-seg">
+            <button class="btn" data-all="static">🧍 All stay</button>
+            <button class="btn" data-all="zone">🟥 All zone</button>
+            <button class="btn" data-all="mark">👁 All mark</button>
+          </div>
+        </div>
+        <div class="group attack-only">
           <h3>Passing routes</h3>
           <div id="routes-pass" class="route-grid"></div>
         </div>
-        <div class="group">
+        <div class="group attack-only">
           <h3>Running plays</h3>
           <div id="routes-run" class="route-grid"></div>
         </div>
-        <div class="group">
+        <div class="group attack-only">
           <div id="routes-custom" class="route-grid one"></div>
         </div>
       </aside>
@@ -55,10 +63,13 @@
     <footer class="bottombar">
       <div class="stepper" role="group" aria-label="Number of players">
         <button id="btn-minus" class="btn icon" aria-label="Fewer players">−</button>
-        <span><b id="count">5</b> players</span>
+        <span><b id="count">5</b> <span id="count-label">players</span></span>
         <button id="btn-plus" class="btn icon" aria-label="More players">＋</button>
       </div>
       <button id="btn-def" class="btn">＋ Defender</button>
+      <label class="vs"><span id="vs-label">Against</span>
+        <select id="vs-select" aria-label="Try this play against"></select>
+      </label>
       <span class="spacer"></span>
       <button id="btn-slow" class="btn">🐢 Slow-mo</button>
       <button id="btn-play" class="btn primary play">▶ Play</button>

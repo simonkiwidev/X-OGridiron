@@ -1,9 +1,9 @@
 // Offline support: keep a copy of the app so it opens without Wi-Fi.
 // Bump VERSION whenever app files change so devices pick up the update.
-const VERSION = 'xog-v3';
+const VERSION = 'xog-v5';
 const FILES = [
   './', 'index.html', 'app.css', 'manifest.webmanifest',
-  'js/app.js', 'js/designer.js', 'js/ui.js', 'js/cloud.js', 'js/pictures.js', 'js/names.js', 'js/vendor/firebase.js', 'js/field.js', 'js/formation.js', 'js/routes.js', 'js/storage.js', 'js/timeline.js',
+  'js/app.js', 'js/designer.js', 'js/ui.js', 'js/cloud.js', 'js/pictures.js', 'js/names.js', 'js/vendor/firebase.js', 'js/field.js', 'js/zones.js', 'js/scene.js', 'js/formation.js', 'js/routes.js', 'js/storage.js', 'js/timeline.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];
 

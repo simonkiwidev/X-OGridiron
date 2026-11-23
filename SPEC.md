@@ -63,6 +63,15 @@ plus running: QB Run, Handoff, Pitch.
 - **Print / export** a team playbook as PDF.
 - Reset a class for a new term.
 
+## Defence
+- Defenders have names (2 letters/numbers) and a one-tap job: **Stay**, **Zone** or **Mark**.
+- Four PE zones beyond the line (2 × 2): 1 short-left, 2 short-right, 3 deep-left, 4 deep-right, drawn faintly on the field.
+  Zone defenders guard the square they stand in (drag to re-tag, or tap 1–4) and chase attackers who enter it.
+- Mark defenders follow the nearest free attacker, or one chosen by tapping their letter (marking the QB = rusher).
+- "Whole defence" buttons: all stay / all zone / all mark.
+- **Defence set-ups** are their own kind of play (section under the attack plays, "＋ New defence").
+  They're tried against a chosen attack play (or a sample attack); attack plays can be tried against a chosen defence.
+
 ## Later ideas (not in v1)
 - Forward passes with ball flight.
 - Moving defenders and "Complete / Covered" results.

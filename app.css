@@ -335,3 +335,29 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35); max-width: calc(100% - 32px); text-align: center;
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------- defence ---------- */
+#designer.kind-defence .attack-only, #designer.kind-defence #btn-def { display: none; }
+.dlabel { fill: #fff; font-size: 1.3px; font-weight: 800; text-anchor: middle; font-family: inherit; pointer-events: none; }
+.dbadge { fill: #7a1414; font-size: 0.95px; font-weight: 900; text-anchor: middle; font-family: inherit; pointer-events: none; }
+.znum { fill: #fff; fill-opacity: 0.22; font-size: 4.5px; font-weight: 900; text-anchor: middle; font-family: inherit; pointer-events: none; }
+.field .faded { opacity: 0.75; }
+.dot.def { background: #e03131; color: #fff; border-radius: 9px; font-size: 12px; }
+.role-seg { margin-top: 10px; width: 100%; }
+.role-seg .btn, .all-seg .btn { flex: 1; padding: 10px 6px; }
+.all-seg { width: 100%; }
+.chip-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.chip { border: 0; border-radius: 10px; min-width: 44px; min-height: 40px; padding: 6px 10px; background: var(--panel-2); color: var(--text); font-weight: 800; cursor: pointer; }
+.chip.on { background: var(--accent); color: var(--accent-ink); }
+.chip.pchip { box-shadow: inset 0 -4px 0 var(--pc); }
+.chip.auto { outline: 2px dashed var(--accent); outline-offset: -2px; }
+.vs { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
+.vs select {
+  background: var(--panel-2); color: var(--text); border: 0; border-radius: 12px; min-height: 44px; padding: 0 12px;
+  font: inherit; font-weight: 700; max-width: 220px;
+}
+#designer.readonly .bottombar .vs { display: flex; }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 26px 0 12px; flex-wrap: wrap; }
+.section-head h2 { font-size: 20px; }
+.badge-def { display: inline-block; background: #e03131; color: #fff; font-size: 11px; font-weight: 800; padding: 2px 6px; border-radius: 6px; margin-right: 6px; vertical-align: 2px; }
+.field.playing .markline { display: none; }
