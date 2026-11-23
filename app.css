@@ -302,6 +302,13 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
   color: #10261a; font-size: 12px; font-weight: 800; border: 2px solid #0b2e17;
 }
 .dot.def { background: rgba(201, 42, 42, 0.3); color: #ff6b6b; font-size: 18px; }
+.label-edit { display: flex; align-items: center; gap: 10px; margin-top: 10px; color: var(--muted); font-size: 14px; flex-wrap: wrap; }
+.label-input {
+  width: 72px; background: var(--panel-2); color: var(--text); border: 2px solid var(--line); border-radius: 10px;
+  font: inherit; font-size: 20px; font-weight: 800; text-align: center; text-transform: uppercase; padding: 6px;
+  -webkit-user-select: text; user-select: text;
+}
+.label-input:focus { outline: none; border-color: var(--accent); }
 .sel-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .seg { display: flex; background: var(--panel-2); border-radius: 12px; }
 .seg .btn { background: transparent; padding: 10px 10px; }

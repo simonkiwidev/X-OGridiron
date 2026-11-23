@@ -30,7 +30,8 @@ Teachers manage classes, teams and a shared class playbook.
 
 ## Play designer
 - Choose number of attacking players: **2–11, default 5**.
-- Players start in a default formation; drag to reposition.
+- No blockers (PE flag style): the QB starts a few metres back with the ball and everyone else is spread evenly along the line; drag to reposition.
+- Players are labelled with letters (QB, X, Z, Y, H…) and can be renamed to any 1–2 letters or numbers.
 - Optional **defenders** (stationary) can be placed.
 - **Quick workflow:** tap a route from the route bar → tap a player (or a spot on the field) to apply it.
 - Routes can be **flipped left/right** and set **short / medium / deep**.

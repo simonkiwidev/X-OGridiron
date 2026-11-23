@@ -131,9 +131,9 @@ export function renderPlay(play, opts = {}) {
   }
   play.defenders.forEach((d) => (s += defenderMarkup(d, sel.kind === 'defender' && sel.id === d.id)));
   play.players.forEach((p, i) => (s += playerMarkup(p, i, sel.kind === 'player' && sel.id === p.id, opts.thumb)));
-  // ball starts with the centre (or QB if there is no centre)
-  const holder = play.players.find((p) => p.label === 'C') || play.players[0];
-  const [bx, by] = toSvg([holder.x, holder.y + PLAYER_R + 0.6]);
+  // ball starts with the QB (player 1)
+  const holder = play.players[0];
+  const [bx, by] = toSvg([holder.x + 1.2, holder.y + 0.3]);
   s += `<g id="ballpos" transform="translate(${f1(bx)} ${f1(by)})">${ballMarkup('ball')}</g>`;
   return s;
 }

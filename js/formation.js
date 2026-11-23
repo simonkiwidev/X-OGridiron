@@ -1,17 +1,10 @@
-// Default player spots. Players are added in this order as the count goes up.
-export const FORMATION = [
-  { label: 'QB', x: 25, y: -4.5, color: '#ffd43b' },
-  { label: 'C', x: 25, y: -1, color: '#f1f3f5' },
-  { label: 'X', x: 6, y: -1, color: '#4dabf7' },
-  { label: 'Z', x: 44, y: -1, color: '#ff922b' },
-  { label: 'Y', x: 37, y: -2, color: '#da77f2' },
-  { label: 'RB', x: 29, y: -5, color: '#f783ac' },
-  { label: 'H', x: 13, y: -2, color: '#3bc9db' },
-  { label: 'LG', x: 21.5, y: -1, color: '#ced4da' },
-  { label: 'RG', x: 28.5, y: -1, color: '#ced4da' },
-  { label: 'LT', x: 18, y: -1, color: '#adb5bd' },
-  { label: 'RT', x: 32, y: -1, color: '#adb5bd' },
-];
+// Default player spots. The QB (player 1) stands a few metres back with the ball;
+// everyone else lines up evenly along the line of scrimmage. No blockers.
+const LABELS = ['QB', 'X', 'Z', 'Y', 'H', 'F', 'R', 'S', 'T', 'W', 'U'];
+const COLOURS = ['#ffd43b', '#4dabf7', '#ff922b', '#da77f2', '#f783ac', '#3bc9db', '#69db7c', '#ff8787', '#748ffc', '#e599f7', '#ffa94d'];
+
+const QB_SPOT = { x: 25, y: -4.5 };
+const LINE_Y = -1;
 
 export const DEFENCE_SPOTS = [
   [25, 6], [10, 7], [40, 7], [18, 3], [32, 3], [25, 15],
@@ -22,15 +15,32 @@ export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 11;
 export const MAX_DEFENDERS = 11;
 
+/** Player labels: up to 2 letters or numbers. */
+export const cleanLabel = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 2);
+
 export function makePlayer(i) {
-  const f = FORMATION[i];
-  return { id: 'p' + i, label: f.label, color: f.color, x: f.x, y: f.y, route: null };
+  const spot = i === 0 ? QB_SPOT : { x: 25, y: LINE_Y };
+  return { id: 'p' + i, label: LABELS[i], color: COLOURS[i], x: spot.x, y: spot.y, route: null, auto: i > 0 };
+}
+
+/** Spread the players nobody has moved yet evenly along the line. */
+export function spreadPlayers(play) {
+  const others = play.players.slice(1);
+  const n = others.length;
+  const left = 4;
+  const width = 42;
+  others.forEach((p, i) => {
+    if (!p.auto) return;
+    p.x = +(left + ((i + 0.5) * width) / n).toFixed(2);
+    p.y = LINE_Y;
+  });
 }
 
 export function setPlayerCount(play, n) {
   n = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, n));
   while (play.players.length < n) play.players.push(makePlayer(play.players.length));
   play.players.length = n;
+  spreadPlayers(play);
 }
 
 export function addDefender(play) {

@@ -26,8 +26,7 @@ function along(path, d) {
 
 export function buildTimeline(play) {
   const players = play.players;
-  const centreIdx = players.findIndex((p) => p.label === 'C');
-  const hikeTime = centreIdx >= 0 ? 0.45 : 0.15;
+  const hikeTime = 0.4; // short pause on "Hike!" before everyone runs
   const paths = players.map((p) => pathOf(p, play));
 
   const posAt = (i, t) => along(paths[i], (t - hikeTime) * SPEED);
@@ -36,9 +35,6 @@ export function buildTimeline(play) {
   const segs = [];
   let holder = 0; // QB
   let tNow = hikeTime;
-  if (centreIdx >= 0) {
-    segs.push({ type: 'fly', from: [players[centreIdx].x, players[centreIdx].y], to: 0, t0: 0, t1: hikeTime });
-  }
 
   // Ball exchanges (handoffs and pitches), worked out in time order.
   const events = [];

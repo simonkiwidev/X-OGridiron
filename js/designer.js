@@ -1,6 +1,6 @@
 // The play designer screen: pick routes, tap players, drag, draw, play back.
 import { PASS_ROUTES, RUN_PLAYS, CUSTOM, FIELD, DEPTH_NAMES, routeById, defaultDir, hasDepth, iconPoints } from './routes.js';
-import { setPlayerCount, addDefender, MIN_PLAYERS, MAX_PLAYERS, MAX_DEFENDERS } from './formation.js';
+import { setPlayerCount, addDefender, cleanLabel, MIN_PLAYERS, MAX_PLAYERS, MAX_DEFENDERS } from './formation.js';
 import { renderPlay, svgOpen, fromSvg, toSvg, PLAYER_R } from './field.js';
 import { buildTimeline } from './timeline.js';
 import { $, esc, toast, showScreen } from './ui.js';
@@ -85,13 +85,17 @@ function findSelected() {
   return selected.kind === 'player' ? findPlayer(selected.id) : play.defenders.find((d) => d.id === selected.id);
 }
 
-function render(extra = '') {
+function renderField(extra = '') {
   if (!svg) {
     $('field').innerHTML = svgOpen('fsvg') + '</svg>';
     svg = $('field').firstChild;
   }
-  if (selected && !findSelected()) selected = null;
   svg.innerHTML = renderPlay(play, { selected }) + extra;
+}
+
+function render(extra = '') {
+  if (selected && !findSelected()) selected = null;
+  renderField(extra);
   renderPanel();
   renderHint();
   $('count').textContent = play.players.length;
@@ -125,6 +129,7 @@ function renderPanel() {
   }
   const r = obj.route;
   const name = r ? routeById(r.id).name : 'No route yet — pick one below';
+  const isQB = obj === play.players[0];
   let btns = '';
   if (r) {
     btns += `<button class="btn" data-sel="flip">⇆ Flip</button>`;
@@ -136,8 +141,36 @@ function renderPanel() {
     btns += `<button class="btn danger" data-sel="clear">✕ Remove route</button>`;
   }
   el.innerHTML = `<div class="sel-title"><span class="dot" style="background:${obj.color}">${esc(obj.label)}</span> ${esc(name)}</div>
+    <label class="label-edit">Player name
+      <input class="label-input" data-label maxlength="2" value="${esc(obj.label)}" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Player name, up to 2 letters or numbers">
+      <span class="muted small">${isQB ? 'Starts with the ball' : '2 letters or numbers'}</span>
+    </label>
     <div class="sel-btns">${btns}</div>`;
 }
+
+// Renaming a player: up to 2 letters or numbers.
+$('sel-panel').addEventListener('focusin', (e) => {
+  if (e.target.matches('[data-label]')) snapshot();
+});
+$('sel-panel').addEventListener('input', (e) => {
+  if (!e.target.matches('[data-label]')) return;
+  const obj = findSelected();
+  if (!obj) return;
+  const v = cleanLabel(e.target.value);
+  if (e.target.value !== v) e.target.value = v;
+  if (!v) return;
+  obj.label = v;
+  const dot = $('sel-panel').querySelector('.dot');
+  if (dot) dot.textContent = v;
+  changed();
+  renderField();
+});
+$('sel-panel').addEventListener('focusout', (e) => {
+  if (e.target.matches('[data-label]') && !e.target.value) e.target.value = findSelected()?.label || '';
+});
+$('sel-panel').addEventListener('keydown', (e) => {
+  if (e.target.matches('[data-label]') && e.key === 'Enter') e.target.blur();
+});
 
 $('sel-panel').addEventListener('click', (e) => {
   const b = e.target.closest('[data-sel]');
@@ -296,6 +329,7 @@ fieldEl.addEventListener('pointermove', (e) => {
   const [x, y] = clampPos(down.hit.kind, toField(e));
   down.hit.obj.x = x;
   down.hit.obj.y = y;
+  down.hit.obj.auto = false;
   selected = { kind: down.hit.kind, id: down.hit.obj.id };
   render();
 });
@@ -346,6 +380,7 @@ fieldEl.addEventListener('pointerup', () => {
     const before = JSON.stringify(play); // so one Undo reverts the move and the route
     near.x = target[0];
     near.y = target[1];
+    near.auto = false;
     applyRoute(near, armed);
     history[history.length - 1] = before;
     return;
