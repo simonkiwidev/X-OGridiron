@@ -8,14 +8,15 @@ Teachers manage classes, teams and a shared class playbook.
 - One codebase for students and teachers.
 - Must load fast and run smoothly in iPad Safari.
 - **Offline-first**: Wi-Fi is patchy. Once loaded, the app works fully offline and syncs when the connection returns.
-- Backend: **Google Firebase** (Firestore + Auth), free tier.
+- Backend: **Google Firebase**, free Spark plan: Cloud Firestore (Standard, `australia-southeast1`, production-mode rules) + Auth (Google, Email/Password, Anonymous). No Google Analytics.
 - Hosting: free static hosting (GitHub Pages or Firebase Hosting).
 - NZ English spelling. Field marked in **metres**.
 
 ## Users & sign-in
 
 ### Teachers
-- Sign-in options: **Google**, **email + password**, or **continue as guest** (guest data stays on that device until they create an account).
+- Sign-in options: **Google**, **email + password** (with a show/hide password button), or **continue as guest**.
+- Guest mode is fully usable so people can try the app with no sign-up. Guest data stays on that device; a gentle, non-blocking prompt offers to upgrade to a Google/email account (keeping their data) to use it across devices.
 - Many teachers; each teacher can have many classes.
 
 ### Students (team-based, no student names stored)
