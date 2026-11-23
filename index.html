@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>X-O Gridiron</title>
+  <meta name="description" content="Design, try and save gridiron plays.">
+  <meta name="theme-color" content="#14532d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="X-O Gridiron">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <!-- HOME -->
+  <section id="home" class="screen" hidden>
+    <header class="home-head">
+      <div class="brand">
+        <img src="icons/icon-192.png" alt="" class="logo">
+        <div>
+          <h1>X-O Gridiron</h1>
+          <p class="sub">Design a play. Try it. Save it.</p>
+        </div>
+      </div>
+      <button id="btn-new" class="btn big primary">＋ New play</button>
+    </header>
+    <main class="home-main">
+      <h2>My plays</h2>
+      <div id="play-list" class="play-list"></div>
+      <p id="empty" class="empty" hidden>No plays yet. Tap <b>＋ New play</b> to make your first one!</p>
+      <p class="note">Plays are saved on this device for now. Class and team sign-in is coming soon.</p>
+    </main>
+  </section>
+
+  <!-- DESIGNER -->
+  <section id="designer" class="screen" hidden>
+    <header class="topbar">
+      <button id="btn-back" class="btn icon" aria-label="Back to my plays">‹</button>
+      <input id="play-name" class="play-name" maxlength="30" aria-label="Play name" autocomplete="off" spellcheck="false">
+      <span id="saved" class="saved"></span>
+      <button id="btn-undo" class="btn" aria-label="Undo">↶ Undo</button>
+    </header>
+
+    <div class="workspace">
+      <div class="field-wrap">
+        <div id="field" class="field"></div>
+        <div id="hint" class="hint"></div>
+      </div>
+
+      <aside class="panel">
+        <div id="sel-panel" class="sel-panel"></div>
+
+        <div class="group">
+          <h3>Passing routes</h3>
+          <div id="routes-pass" class="route-grid"></div>
+        </div>
+        <div class="group">
+          <h3>Running plays</h3>
+          <div id="routes-run" class="route-grid"></div>
+        </div>
+        <div class="group">
+          <div id="routes-custom" class="route-grid one"></div>
+        </div>
+      </aside>
+    </div>
+
+    <footer class="bottombar">
+      <div class="stepper" role="group" aria-label="Number of players">
+        <button id="btn-minus" class="btn icon" aria-label="Fewer players">−</button>
+        <span><b id="count">5</b> players</span>
+        <button id="btn-plus" class="btn icon" aria-label="More players">＋</button>
+      </div>
+      <button id="btn-def" class="btn">＋ Defender</button>
+      <span class="spacer"></span>
+      <button id="btn-slow" class="btn">🐢 Slow-mo</button>
+      <button id="btn-play" class="btn primary play">▶ Play</button>
+    </footer>
+  </section>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

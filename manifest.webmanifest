@@ -1,0 +1,17 @@
+{
+  "name": "X-O Gridiron",
+  "short_name": "X-O Gridiron",
+  "description": "Design, try and save gridiron plays.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f2a1a",
+  "theme_color": "#14532d",
+  "lang": "en-NZ",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
