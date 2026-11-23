@@ -1,0 +1,82 @@
+rules_version = '2';
+
+// X-O Gridiron security rules.
+// Paste this into Firebase console → Firestore Database → Rules, then press Publish.
+//
+// Who can do what:
+// - Teachers own their classes and can see/change everything in them (teams, codes, plays).
+// - Students (anonymous sign-in on the iPad) can see a class's team NAMES,
+//   but only see/edit a team's plays after entering that team's picture code.
+// - Picture codes can only be read by the class's teacher.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function classPath(c) { return /databases/$(database)/documents/classes/$(c); }
+    function teamPath(c, t) { return /databases/$(database)/documents/classes/$(c)/teams/$(t); }
+    function secretPath(c, t) { return /databases/$(database)/documents/classes/$(c)/teams/$(t)/secret/code; }
+    function isOwner(c) { return signedIn() && get(classPath(c)).data.owner == me(); }
+    function isMember(c, t) {
+      return signedIn() && exists(/databases/$(database)/documents/classes/$(c)/teams/$(t)/members/$(me()));
+    }
+    function goodName(n, max) { return n is string && n.size() >= 1 && n.size() <= max; }
+
+    // Class join codes -> class id. Can be looked up one at a time, never listed.
+    match /classCodes/{code} {
+      allow get: if signedIn();
+      allow create: if signedIn()
+        && getAfter(classPath(request.resource.data.classId)).data.owner == me()
+        && getAfter(classPath(request.resource.data.classId)).data.code == code;
+      allow delete: if signedIn() && isOwner(resource.data.classId);
+    }
+
+    match /classes/{c} {
+      allow get: if signedIn();
+      allow list: if signedIn() && resource.data.owner == me();
+      allow create: if signedIn() && request.resource.data.owner == me() && goodName(request.resource.data.name, 40);
+      allow update: if isOwner(c)
+        && request.resource.data.owner == resource.data.owner
+        && request.resource.data.code == resource.data.code
+        && goodName(request.resource.data.name, 40);
+      allow delete: if isOwner(c);
+
+      match /teams/{t} {
+        allow read: if signedIn();
+        allow create: if signedIn() && exists(classPath(c))
+          && request.resource.data.createdBy == me()
+          && goodName(request.resource.data.name, 20);
+        allow update: if isOwner(c) && goodName(request.resource.data.name, 20);
+        allow delete: if isOwner(c);
+
+        // The team's picture code. Only the teacher can read it.
+        match /secret/{s} {
+          allow read: if isOwner(c);
+          // The person creating a brand-new team sets its first code.
+          allow create: if s == 'code' && (isOwner(c)
+            || (!exists(teamPath(c, t)) && getAfter(teamPath(c, t)).data.createdBy == me()));
+          allow update, delete: if isOwner(c);
+        }
+
+        // A device becomes a team member by proving it knows the picture code.
+        match /members/{uid} {
+          allow get: if signedIn() && (uid == me() || isOwner(c));
+          allow list, delete: if isOwner(c);
+          allow create, update: if signedIn() && uid == me()
+            && request.resource.data.code == getAfter(secretPath(c, t)).data.code;
+        }
+
+        match /plays/{p} {
+          allow read, write: if isMember(c, t) || isOwner(c);
+        }
+      }
+
+      // Plays the teacher shares with the whole class.
+      match /playbook/{p} {
+        allow read: if signedIn();
+        allow write: if isOwner(c);
+      }
+    }
+  }
+}

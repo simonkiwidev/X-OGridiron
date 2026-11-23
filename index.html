@@ -16,25 +16,8 @@
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
-  <!-- HOME -->
-  <section id="home" class="screen" hidden>
-    <header class="home-head">
-      <div class="brand">
-        <img src="icons/icon-192.png" alt="" class="logo">
-        <div>
-          <h1>X-O Gridiron</h1>
-          <p class="sub">Design a play. Try it. Save it.</p>
-        </div>
-      </div>
-      <button id="btn-new" class="btn big primary">＋ New play</button>
-    </header>
-    <main class="home-main">
-      <h2>My plays</h2>
-      <div id="play-list" class="play-list"></div>
-      <p id="empty" class="empty" hidden>No plays yet. Tap <b>＋ New play</b> to make your first one!</p>
-      <p class="note">Plays are saved on this device for now. Class and team sign-in is coming soon.</p>
-    </main>
-  </section>
+  <!-- ALL OTHER SCREENS are drawn into here -->
+  <section id="page" class="screen" hidden></section>
 
   <!-- DESIGNER -->
   <section id="designer" class="screen" hidden>
@@ -42,6 +25,7 @@
       <button id="btn-back" class="btn icon" aria-label="Back to my plays">‹</button>
       <input id="play-name" class="play-name" maxlength="30" aria-label="Play name" autocomplete="off" spellcheck="false">
       <span id="saved" class="saved"></span>
+      <span id="top-actions" class="top-actions"></span>
       <button id="btn-undo" class="btn" aria-label="Undo">↶ Undo</button>
     </header>
 
@@ -81,6 +65,7 @@
     </footer>
   </section>
 
+  <div id="overlay" class="overlay" hidden></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script type="module" src="js/app.js"></script>
